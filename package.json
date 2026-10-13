@@ -1,0 +1,20 @@
+{
+  "name": "below-the-waterline",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Below the Waterline: Derek Umoren's portfolio as an iceberg dive.",
+  "scripts": {
+    "test:seabed": "node --test test/seabed-life.test.js",
+    "test:camera": "node --test test/camera-route.test.js",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1"
+  }
+}

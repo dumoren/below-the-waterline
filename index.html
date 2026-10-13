@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Derek Umoren · Below the Waterline</title>
+    <meta name="description" content="Derek Umoren, computer engineer in St. John's, Newfoundland. Dive beneath an iceberg to find his work." />
+    <meta name="theme-color" content="#02070d" />
+    <meta property="og:title" content="Derek Umoren · Below the Waterline" />
+    <meta property="og:description" content="Most of what I build is below the surface." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./social-preview.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Derek Umoren's portfolio: an iceberg above and below the waterline." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Derek Umoren · Below the Waterline" />
+    <meta name="twitter:description" content="Computer engineering, software, and the work beneath the surface." />
+    <meta name="twitter:image" content="./social-preview.jpg" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Hanken+Grotesk:wght@300;400;500&display=swap" />
+    <script>
+      document.documentElement.classList.replace('no-js', 'js');
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#log" data-open-log>Skip to the dive log</a>
+
+    <div id="dive">
+      <canvas id="gl" aria-hidden="true"></canvas>
+      <div id="markers" aria-hidden="true"></div>
+
+      <header class="hud">
+        <h1 class="brand"><a href="#surface" data-surface>Derek Umoren</a></h1>
+        <nav class="tools" aria-label="Dive controls">
+          <p class="found" aria-live="polite" title="Contacts found on the dive"><span class="sonar-ico" aria-hidden="true"></span><b id="found">0</b>/<span id="total">7</span><span class="found-l" aria-hidden="true">found</span><span class="sr-only"> contacts found</span></p>
+          <button type="button" id="btn-sound" class="ico" aria-pressed="false" aria-label="Sound">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><path class="waves" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" /></svg>
+          </button>
+          <button type="button" id="btn-contact" class="ico" aria-label="Contact: come aboard">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="1.5" /><path d="M4 7l8 6 8-6" /></svg>
+          </button>
+          <button type="button" id="btn-log" class="text-view" data-open-log aria-label="Text view: read the dive log">Text view</button>
+        </nav>
+      </header>
+
+      <main id="stage-main" aria-label="Dive">
+        <section class="hero" id="hero">
+          <p class="hero-k">St. John's, Newfoundland · 47.56° N</p>
+          <h2 class="hero-name">Derek<br />Umoren</h2>
+          <p class="hero-line">Computer engineer.<br />Most of what I build is below the surface.</p>
+        </section>
+
+        <div id="card" role="dialog" aria-modal="false" aria-labelledby="card-title" tabindex="-1" hidden inert>
+          <button type="button" class="card-x" id="card-x" aria-label="Close">×</button>
+          <div class="card-body"></div>
+        </div>
+      </main>
+
+      <aside class="gauge" aria-label="Depth">
+        <div class="gauge-track" id="gauge-track">
+          <div class="gauge-zones" id="gauge-zones"></div>
+          <div class="gauge-fill" id="gauge-fill"></div>
+          <div class="gauge-ticks" id="gauge-ticks"></div>
+          <div class="gauge-marks" id="gauge-marks"></div>
+          <div class="gauge-now" id="gauge-now"><span id="depth">0</span><i>m</i></div>
+        </div>
+        <p class="gauge-env" aria-hidden="true"><span id="temp">−1.2</span>°C · <span id="atm">1.0</span> atm</p>
+      </aside>
+
+      <div id="zone" aria-hidden="true">
+        <p class="zone-n"></p>
+        <p class="zone-name"></p>
+        <p class="zone-range"></p>
+      </div>
+
+      <p id="hint" aria-hidden="true"><span class="h-desk">Scroll to dive · Click to ping</span><span class="h-touch">Swipe to dive · Tap to ping</span></p>
+      <button type="button" id="resurface" hidden>Resurface ↑</button>
+      <button type="button" id="aboard" hidden><span>Follow the chain up</span><i aria-hidden="true">↑</i><em>Or tap the anchor</em></button>
+      <div id="announce" class="sr-only" aria-live="polite"></div>
+
+      <div id="curtain" aria-hidden="true"></div>
+    </div>
+
+    <!-- The dive log: the single source of content, the accessible view,
+         and what visitors without WebGL see. Depths are in metres. -->
+    <section id="log" tabindex="-1" aria-label="Dive log">
+      <div class="log-inner">
+        <header class="log-head">
+          <button type="button" class="log-x" id="btn-close-log">Back to the dive</button>
+          <p class="log-k">Dive log</p>
+          <h2>Derek Umoren</h2>
+          <p class="log-sub">Computer engineer in St. John's, Newfoundland. Most of what I build is below the surface.</p>
+        </header>
+
+        <!-- Each zone is a résumé section: a depth band with its own form and colour in the dive. -->
+        <section class="zone" data-zone="experience" data-label="Experience" data-singular="Experience" data-n="I" data-from="20" data-to="82" data-color="#ffb86b">
+          <h3 class="zone-h"><span class="zone-n">I</span>Experience<em>20 – 82 m · crystals in the ice</em></h3>
+          <ol class="contacts">
+            <li data-id="angler" data-depth="34" data-color="#ffb86b" data-angle="0.13">
+              <h4>Angler Solutions</h4>
+              <p class="role">Software Engineering Intern</p>
+              <p class="when">Jan – Apr 2026 · May – Aug 2025 · St. John's, NL</p>
+              <p class="line">Clean-energy simulators for hydrogen, wind and storage, taken from spreadsheets to production.</p>
+              <ul class="tags"><li>Python</li><li>FastAPI</li><li>Nuxt 3</li><li>AWS Lambda</li></ul>
+            </li>
+            <li data-id="bluedrop" data-depth="66" data-color="#ffd08f" data-angle="-0.13">
+              <h4>Bluedrop ISM</h4>
+              <p class="role">Full Stack Developer Intern</p>
+              <p class="when">Sep – Dec 2024 · St. John's, NL</p>
+              <p class="line">Type-safe data from SQL to UI, built with pgTyped and GraphQL.</p>
+              <ul class="tags"><li>TypeScript</li><li>PostgreSQL</li><li>GraphQL</li><li>Kubernetes</li></ul>
+            </li>
+          </ol>
+        </section>
+
+        <section class="zone" data-zone="projects" data-label="Projects" data-singular="Project" data-n="II" data-from="82" data-to="140" data-color="#5ff2cf">
+          <h3 class="zone-h"><span class="zone-n">II</span>Projects<em>82 – 140 m · tethered probes</em></h3>
+          <ol class="contacts">
+            <li id="project/greenqueue" data-id="greenqueue" data-depth="96" data-color="#5ff2cf" data-angle="0.13">
+              <h4>GreenQueue</h4>
+              <p class="role">Carbon-aware Kubernetes scheduling</p>
+              <p class="line">A Kubernetes controller that runs batch jobs when the grid is cleanest, and still meets their deadlines.</p>
+              <ul class="tags"><li>Go</li><li>Kubernetes</li><li>.NET 8</li><li>Prometheus</li></ul>
+            </li>
+            <li id="project/a11yguard" data-id="a11yguard" data-depth="126" data-color="#72d6ff" data-angle="-0.13">
+              <h4>A<span class="nx">11</span>yGuard</h4>
+              <p class="role">Accessibility checks for every pull request</p>
+              <p class="line">A GitHub App that catches accessibility regressions before they merge.</p>
+              <ul class="tags"><li>TypeScript</li><li>Playwright</li><li>axe-core</li><li>BullMQ</li></ul>
+            </li>
+          </ol>
+        </section>
+
+        <section class="zone" data-zone="education" data-label="Education" data-singular="Education" data-n="III" data-from="140" data-to="176" data-color="#ffe9c9">
+          <h3 class="zone-h"><span class="zone-n">III</span>Education<em>140 – 176 m · the foundation layer</em></h3>
+          <ol class="contacts">
+            <li data-id="mun" data-depth="156" data-color="#ffe9c9" data-angle="0.13">
+              <h4>Memorial University</h4>
+              <p class="role">B.Eng. Computer Engineering</p>
+              <p class="when">Expected May 2027 · St. John's, NL</p>
+              <dl class="stats">
+                <div><dt>GPA</dt><dd>3.76</dd></div>
+                <div><dt>Standing</dt><dd>Dean's List</dd></div>
+              </dl>
+              <ul class="tags"><li>Computer Architecture</li><li>Concurrency</li><li>DSP</li><li>Algorithms</li></ul>
+            </li>
+          </ol>
+        </section>
+
+        <section class="zone" data-zone="toolkit" data-label="Toolkit" data-singular="Toolkit" data-n="IV" data-color="#bfe6ff" data-roaming>
+          <h3 class="zone-h"><span class="zone-n">IV</span>Toolkit<em>every depth · the school</em></h3>
+          <ol class="contacts">
+            <li data-id="toolkit" data-kind="school" data-color="#bfe6ff">
+              <h4>The school</h4>
+              <p class="role">The tools that swim with me at every depth</p>
+              <dl class="skills">
+                <div><dt>Languages</dt><dd>TypeScript, JavaScript, Python, Go, C/C++, SQL</dd></div>
+                <div><dt>Frameworks</dt><dd>React, Next.js, Vue 3, Nuxt 3, FastAPI, Node.js, .NET 8</dd></div>
+                <div><dt>Data &amp; infra</dt><dd>PostgreSQL, Redis, AWS, Docker, Kubernetes, GitHub Actions</dd></div>
+                <div><dt>Testing</dt><dd>pytest, Playwright, axe-core, Prometheus, Grafana</dd></div>
+              </dl>
+            </li>
+          </ol>
+        </section>
+
+        <section class="zone" data-zone="contact" data-label="Contact" data-singular="Contact" data-n="V" data-color="#ff5a45">
+          <h3 class="zone-h"><span class="zone-n">V</span>Contact<em>0 m · back on board</em></h3>
+          <ol class="contacts">
+            <li data-id="contact" data-kind="vessel" data-color="#ff5a45">
+              <h4>Come aboard</h4>
+              <p class="role">Open to software engineering roles</p>
+              <p class="line">That's the dive. Most of what I build is below the surface; let's talk above it.</p>
+              <ul class="links">
+                <li><a href="mailto:derekumoren@gmail.com">derekumoren@gmail.com</a></li>
+                <li><a href="https://www.linkedin.com/in/derekumoren/" target="_blank" rel="noopener">LinkedIn</a></li>
+                <li><a href="https://github.com/dumoren" target="_blank" rel="noopener">GitHub</a></li>
+                <li><a href="./Derek-Umoren-Resume.pdf" target="_blank" rel="noopener">Résumé</a></li>
+              </ul>
+            </li>
+          </ol>
+        </section>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

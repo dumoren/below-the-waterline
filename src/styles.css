@@ -1,0 +1,1393 @@
+/* Below the Waterline. The scene does the talking; the interface stays out of the way. */
+
+:root {
+  --bg: #02070d;
+  --ink: #e8f4fb;
+  --ink-2: rgba(232, 244, 251, 0.72);
+  --dim: rgba(232, 244, 251, 0.5);
+  --faint: rgba(232, 244, 251, 0.18);
+  --line: rgba(160, 220, 255, 0.16);
+  --sonar: #7fe9ff;
+  --glass: rgba(6, 20, 30, 0.5);
+  --chip: rgba(8, 26, 38, 0.32);
+  --chip-line: rgba(160, 220, 255, 0.12);
+  --text-glow: 0 1px 8px rgba(2, 7, 13, 0.7);
+  --sans: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'DM Mono', ui-monospace, Menlo, Consolas, monospace;
+  --gutter: clamp(18px, 2.6vw, 36px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: inherit;
+}
+:focus-visible {
+  outline: 1px solid var(--sonar);
+  outline-offset: 3px;
+}
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.skip {
+  position: fixed;
+  z-index: 100;
+  left: var(--gutter);
+  top: 10px;
+  padding: 8px 12px;
+  background: var(--sonar);
+  color: #001;
+  font: 500 12px/1 var(--mono);
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 0.2s;
+}
+.skip:focus-visible {
+  transform: none;
+}
+.nx {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  letter-spacing: -0.04em;
+}
+
+/* ─────────── Modes ─────────── */
+
+.no-js #dive,
+.no-webgl #dive {
+  display: none;
+}
+.js:not(.no-webgl) body {
+  height: 100svh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#dive {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+#gl.pointing {
+  cursor: pointer;
+}
+
+#curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg);
+  transition: opacity 1.6s ease;
+  pointer-events: none;
+}
+#curtain.up {
+  opacity: 0;
+}
+
+/* ─────────── HUD ─────────── */
+
+.hud {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(20px + env(safe-area-inset-top)) var(--gutter) 0;
+  pointer-events: none;
+}
+.hud > * {
+  pointer-events: auto;
+}
+.brand {
+  margin: 0;
+  font: 500 15px/1 var(--sans);
+  letter-spacing: 0.01em;
+}
+.brand a {
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.6s;
+}
+.brand a.show {
+  opacity: 1;
+}
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tools .found {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px 0 0;
+  font: 400 12px/1 var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip);
+  backdrop-filter: blur(8px);
+}
+.tools .found .found-l {
+  margin-left: 2px;
+  color: var(--dim);
+}
+.tools .found b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.sonar-ico {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--sonar);
+  border-radius: 50%;
+  opacity: 0.8;
+}
+.sonar-ico::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--sonar);
+  opacity: 0.8;
+}
+.tools .found.bump .sonar-ico {
+  animation: bump 0.8s ease-out;
+}
+@keyframes bump {
+  0% {
+    box-shadow: 0 0 0 0 rgba(127, 233, 255, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(127, 233, 255, 0);
+  }
+}
+.ico {
+  appearance: none;
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.ico:hover {
+  border-color: rgba(127, 233, 255, 0.5);
+}
+/* Keep a 44px touch target around the smaller visual chip */
+.ico::before,
+.text-view::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
+.text-view {
+  position: relative;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip);
+  font: 500 12px/1 var(--sans);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.text-view:hover { border-color: var(--sonar); }
+.ico svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#btn-sound .waves {
+  opacity: 0.25;
+  transition: opacity 0.2s;
+}
+#btn-sound[aria-pressed='true'] .waves {
+  opacity: 1;
+}
+#btn-sound[aria-pressed='true'] {
+  color: var(--sonar);
+}
+
+/* ─────────── Hero ─────────── */
+
+#stage-main {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.hero {
+  position: absolute;
+  left: var(--gutter);
+  bottom: clamp(56px, 11vh, 120px);
+  max-width: 44vw;
+  will-change: opacity, transform;
+}
+.hero-k {
+  margin: 0 0 18px;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sonar);
+  opacity: 0.85;
+}
+.hero-name {
+  margin: 0;
+  font: 300 clamp(64px, 9.5vw, 156px) / 0.86 var(--sans);
+  letter-spacing: -0.045em;
+  color: var(--ink);
+  text-shadow: 0 2px 40px rgba(2, 7, 13, 0.35);
+}
+.hero-line {
+  margin: 26px 0 0;
+  font: 300 clamp(16px, 1.3vw, 19px) / 1.45 var(--sans);
+  color: var(--ink-2);
+}
+
+/* ─────────── Depth gauge ─────────── */
+
+.gauge {
+  position: absolute;
+  z-index: 8;
+  right: var(--gutter);
+  top: 96px;
+  bottom: 96px;
+  width: 64px;
+  /* Hidden on the surface screen; fades in with the dive (or when a key focuses a mark). */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s;
+}
+.gauge.show,
+.gauge:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+.gauge-track {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 22px;
+  width: 1px;
+  background: var(--faint);
+}
+.gauge-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 0;
+  background: linear-gradient(to bottom, rgba(127, 233, 255, 0.2), var(--sonar));
+}
+.gauge-ticks i {
+  position: absolute;
+  right: 0;
+  width: 5px;
+  height: 1px;
+  background: var(--faint);
+}
+.gauge-ticks i.major {
+  width: 10px;
+  background: var(--dim);
+}
+.gauge-ticks span {
+  position: absolute;
+  right: 16px;
+  transform: translateY(-50%);
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.gauge-marks button {
+  position: absolute;
+  right: -22px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.gauge-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 1px solid var(--c);
+  background: transparent;
+  opacity: 0.55;
+  transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
+  pointer-events: none;
+}
+.gauge-marks button.found .gauge-dot {
+  background: var(--c);
+  border-color: var(--c);
+  box-shadow: 0 0 6px var(--c);
+  opacity: 1;
+}
+.gauge-marks button:hover .gauge-dot,
+.gauge-marks button:focus-visible .gauge-dot {
+  border-color: var(--ink);
+  opacity: 1;
+}
+.gauge-label {
+  position: absolute;
+  right: 44px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 82px));
+  border: 1px solid var(--chip-line);
+  border-radius: 6px;
+  background: rgba(8, 26, 38, 0.55);
+  backdrop-filter: blur(8px);
+  color: var(--ink);
+  font: 400 12px/1.4 var(--sans);
+  text-shadow: var(--text-glow);
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.gauge-marks button:hover,
+.gauge-marks button:focus-visible { z-index: 2; }
+.gauge-marks button:hover .gauge-label,
+.gauge-marks button:focus-visible .gauge-label {
+  opacity: 1;
+  visibility: visible;
+}
+.gauge-now {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 0 16px 0 0;
+  pointer-events: none;
+  text-shadow: var(--text-glow);
+  transform: translateY(-50%);
+  font: 500 14px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+  will-change: top;
+}
+.gauge-now::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 10px;
+  height: 1px;
+  background: var(--sonar);
+  box-shadow: 0 0 8px var(--sonar);
+}
+.gauge-now i {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--dim);
+}
+.gauge-env {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+/* ─────────── 3D markers ─────────── */
+
+#markers {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+.mk {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0; /* the anchor point: left/right tag offsets are measured from it */
+  height: 0;
+  will-change: transform, opacity;
+  transition: opacity 0.4s;
+}
+.mk .ring {
+  position: absolute;
+  left: -15px;
+  top: -15px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--c);
+  opacity: 0.8;
+}
+.mk .ring::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1px solid var(--c);
+  animation: sonar-ring 2.4s ease-out infinite;
+}
+@keyframes sonar-ring {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.mk .tag {
+  position: absolute;
+  left: 24px;
+  top: -8px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  white-space: nowrap;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  opacity: 0;
+  translate: var(--nudge, 0px) 0;
+  transform: translateX(-6px);
+  transition:
+    opacity 0.5s,
+    transform 0.5s;
+}
+.mk .tag em {
+  font-style: normal;
+  color: var(--dim);
+}
+.mk.left .tag {
+  left: auto;
+  right: 24px;
+  flex-direction: row-reverse;
+  transform: translateX(6px);
+}
+/* The anchor's own marker: its label is always shown, since it is the way up. */
+.mk-anchor .tag {
+  opacity: 1;
+  transform: none;
+  color: #ffb3a6;
+}
+
+.mk.found .tag {
+  opacity: 1;
+  transform: none;
+}
+.mk[data-section='toolkit'] .tag {
+  opacity: 1;
+  transform: none;
+  padding: 8px 11px;
+  border: 1px solid rgba(190, 225, 242, 0.45);
+  border-radius: 8px;
+  background: rgba(4, 19, 31, 0.82);
+  box-shadow: 0 0 20px rgba(190, 225, 242, 0.14);
+  color: #eef9ff;
+}
+.mk[data-section='toolkit'] .tag em { display: none; }
+.mk[data-section='toolkit'] .ring { border-color: #e3f5ff; box-shadow: 0 0 12px rgba(210, 242, 255, 0.5); }
+.mk.hover .ring {
+  border-width: 2px;
+}
+
+/* ─────────── Card ─────────── */
+
+#card {
+  position: absolute;
+  z-index: 12;
+  left: 0;
+  top: 0;
+  width: min(330px, calc(100vw - 32px));
+  max-height: calc(100svh - 104px);
+  overflow-y: auto;
+  padding: 22px 22px 20px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  /* Denser than the HUD chips: this is reading text, often over the bright iceberg. */
+  background: rgba(4, 14, 22, 0.74);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition:
+    opacity 0.35s ease,
+    transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#card[hidden] {
+  display: block;
+  visibility: hidden;
+}
+#card.open {
+  opacity: 1;
+  transform: none;
+}
+#card::before {
+  content: '';
+  position: absolute;
+  left: 22px;
+  top: 0;
+  width: 36px;
+  height: 2px;
+  background: var(--c, var(--sonar));
+  box-shadow: 0 0 12px var(--c, var(--sonar));
+}
+.card-x {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--dim);
+  cursor: pointer;
+}
+.card-x:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+.card-k {
+  margin: 0 0 12px;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c, var(--sonar));
+}
+#card h2 {
+  margin: 0;
+  font: 400 28px/1.05 var(--sans);
+  letter-spacing: -0.02em;
+}
+#card .role {
+  margin: 8px 0 0;
+  font: 400 11.5px/1.4 var(--mono);
+  color: var(--dim);
+}
+#card .line {
+  margin: 14px 0 0;
+  font: 300 15.5px/1.45 var(--sans);
+  color: var(--ink-2);
+}
+#card .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+#card .tags li {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+#card .links {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+#card .links li {
+  border-top: 1px solid var(--line);
+}
+#card .links a {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 0;
+  font: 400 16px/1.2 var(--sans);
+  text-decoration: none;
+}
+#card .links a::after {
+  content: '↗';
+  font-family: var(--mono);
+  color: var(--c, var(--sonar));
+}
+#card .links a:hover {
+  color: var(--c, var(--sonar));
+}
+
+/* ─────────── Hint + resurface ─────────── */
+
+#hint {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  bottom: calc(26px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  margin: 0;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: opacity 0.8s;
+}
+#hint::after {
+  content: '';
+  display: block;
+  width: 1px;
+  height: 26px;
+  margin: 12px auto 0;
+  background: linear-gradient(var(--sonar), transparent);
+  animation: drip 2.2s ease-in-out infinite;
+  transform-origin: top;
+}
+@keyframes drip {
+  0% {
+    transform: scaleY(0);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0;
+  }
+}
+#hint.gone {
+  opacity: 0;
+}
+.h-touch {
+  display: none;
+}
+@media (pointer: coarse) {
+  .h-desk {
+    display: none;
+  }
+  .h-touch {
+    display: inline;
+  }
+}
+
+#resurface {
+  position: absolute;
+  z-index: 9;
+  left: 50%;
+  bottom: calc(26px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 11px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+#resurface:hover {
+  border-color: rgba(127, 233, 255, 0.5);
+}
+
+/* ─────────── Dive log (overlay + no-JS page) ─────────── */
+
+#log {
+  background: #03101a;
+  color: var(--ink);
+}
+.js:not(.no-webgl) #log {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: auto;
+  background: rgba(2, 9, 16, 0.86);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 0.4s,
+    visibility 0s linear 0.4s;
+}
+.js.log-open #log {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.4s;
+}
+#log:focus {
+  outline: none;
+}
+.log-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: clamp(48px, 9vw, 110px) var(--gutter) 80px;
+}
+.log-x {
+  display: none;
+  position: fixed;
+  right: var(--gutter);
+  top: calc(20px + env(safe-area-inset-top));
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--glass);
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.js:not(.no-webgl) .log-x {
+  display: block;
+}
+.log-k {
+  margin: 0 0 16px;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sonar);
+}
+#log h2 {
+  margin: 0;
+  font: 300 clamp(48px, 8vw, 88px) / 0.9 var(--sans);
+  letter-spacing: -0.04em;
+}
+.log-sub {
+  margin: 18px 0 0;
+  max-width: 38ch;
+  font: 300 18px/1.45 var(--sans);
+  color: var(--ink-2);
+}
+.contacts {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  counter-reset: c;
+}
+.contacts > li {
+  position: relative;
+  padding: 26px 0 26px 92px;
+  border-top: 1px solid var(--line);
+  counter-increment: c;
+}
+.contacts > li::before {
+  content: '−' attr(data-depth) ' m';
+  position: absolute;
+  left: 0;
+  top: 32px;
+  font: 400 12px/1 var(--mono);
+  color: var(--dim);
+}
+.contacts > li::after {
+  content: '';
+  position: absolute;
+  left: 66px;
+  top: 32px;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  background: var(--c, var(--sonar));
+  box-shadow: 0 0 10px var(--c, var(--sonar));
+}
+.contacts h4 {
+  margin: 0;
+  font: 400 26px/1.1 var(--sans);
+  letter-spacing: -0.02em;
+}
+.contacts h4 button {
+  all: unset;
+  cursor: pointer;
+}
+.contacts h4 button:hover {
+  color: var(--sonar);
+}
+.contacts h4 button:focus-visible {
+  outline: 1px solid var(--sonar);
+  outline-offset: 3px;
+}
+.contacts .role {
+  margin: 6px 0 0;
+  font: 400 12px/1.4 var(--mono);
+  color: var(--dim);
+}
+.contacts .line {
+  margin: 10px 0 0;
+  font: 300 16px/1.5 var(--sans);
+  color: var(--ink-2);
+}
+.contacts .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.contacts .tags li {
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font: 400 11px/1 var(--mono);
+  color: var(--ink-2);
+}
+.contacts .links {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 14px 0 0;
+  padding: 0;
+  font: 400 14px/1.4 var(--sans);
+}
+
+/* ─────────── Small screens ─────────── */
+
+@media (max-width: 760px) {
+  .hud { padding-left: 12px; padding-right: 12px; }
+  .brand { font-size: 13px; white-space: nowrap; }
+  .tools { gap: 5px; }
+  .tools .found { gap: 4px; padding: 0 10px; margin-right: 0; font-size: 11px; }
+  .tools .found .sonar-ico { display: none; }
+  .text-view { padding: 0 10px; font-size: 11px; white-space: nowrap; }
+  .hero-k {
+    display: inline-block;
+    max-width: 100%;
+    color: #c3f5ff;
+    line-height: 1.5;
+    text-shadow: var(--text-glow);
+  }
+  .hero {
+    max-width: none;
+    right: var(--gutter);
+    bottom: 110px;
+  }
+  .hero-name {
+    font-size: clamp(56px, 17vw, 84px);
+  }
+  .gauge {
+    right: 24px;
+    top: 84px;
+    bottom: 120px;
+    width: 40px;
+  }
+  .gauge-ticks span {
+    display: none;
+  }
+  .gauge-env {
+    display: none;
+  }
+  #card {
+    left: 12px !important;
+    right: 12px;
+    top: auto !important;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    width: auto;
+  }
+  .mk .tag {
+    font-size: 11px;
+  }
+  /* Phones: just the name. The gauge beside it already shows the section and depth. */
+  .mk .tag b,
+  .mk .tag em {
+    display: none;
+  }
+  .contacts > li {
+    padding-left: 0;
+    padding-top: 44px;
+  }
+  .contacts > li::before {
+    top: 22px;
+  }
+  .contacts > li::after {
+    left: auto;
+    right: 0;
+    top: 22px;
+  }
+}
+
+.share-project {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 16px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(3, 16, 26, 0.8);
+  font: 500 12px/1.3 var(--sans);
+  cursor: pointer;
+}
+.share-project:hover { border-color: var(--c); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mk .ring::before,
+  #hint::after {
+    animation: none;
+  }
+}
+
+/* ─────────── Sections ───────────
+   Each résumé section is a depth band with its own colour (--c) and form in the scene.
+   The same identity carries through the gauge, markers, cards, zone titles and the log. */
+
+/* Zone title: a chapter heading that surfaces as you cross into a band. */
+#zone {
+  position: absolute;
+  z-index: 7;
+  left: var(--gutter);
+  top: 38%;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px);
+}
+#zone.show {
+  animation: zone-in 3.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes zone-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  14%,
+  72% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+#zone p {
+  margin: 0;
+}
+#zone .zone-n {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font: 500 12px/1 var(--mono);
+  letter-spacing: 0.24em;
+  color: var(--c);
+}
+#zone .zone-n::after {
+  content: '';
+  width: 56px;
+  height: 1px;
+  background: var(--c);
+  box-shadow: 0 0 10px var(--c);
+}
+#zone .zone-name {
+  margin-top: 10px;
+  font: 300 clamp(44px, 5.6vw, 84px) / 0.95 var(--sans);
+  letter-spacing: -0.035em;
+  color: var(--ink);
+  text-shadow: 0 2px 30px rgba(2, 7, 13, 0.5);
+}
+#zone .zone-range {
+  margin-top: 12px;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* Gauge bands: one coloured segment per section, labelled vertically. */
+.gauge-zones {
+  position: absolute;
+  inset: 0;
+}
+.gz {
+  position: absolute;
+  right: -1px;
+  width: 1px;
+  background: var(--c);
+  opacity: 0.25;
+  transition:
+    opacity 0.4s,
+    box-shadow 0.4s;
+}
+.gz.active {
+  right: -1px;
+  width: 2px;
+  opacity: 0.9;
+  box-shadow: 0 0 6px var(--c);
+}
+.gz span {
+  position: absolute;
+  top: 50%;
+  right: 46px;
+  transform: translateY(-50%) rotate(180deg);
+  writing-mode: vertical-rl;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c);
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity 0.4s;
+}
+.gz.active span {
+  opacity: 0.8;
+}
+/* Mark shapes differ by section too. */
+.gauge-marks button[data-section='projects'] .gauge-dot {
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.gauge-marks button[data-section='education'] .gauge-dot {
+  height: 4px;
+  width: 11px;
+  transform: translate(-50%, -50%);
+}
+
+/* Marker chips carry the section. */
+.mk .tag b {
+  padding: 3px 6px;
+  border: 1px solid var(--c);
+  border-radius: 999px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--c);
+}
+.mk[data-section='projects'] .ring {
+  border-radius: 6px;
+  transform: rotate(45deg);
+}
+.mk[data-section='projects'] .ring::before {
+  border-radius: 6px;
+}
+.mk[data-section='toolkit'] .ring {
+  left: -26px;
+  top: -26px;
+  width: 52px;
+  height: 52px;
+  border-style: dashed;
+}
+
+/* Cards: one frame, a different emphasis per section. */
+#card .card-k {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 30px;
+}
+#card .card-d {
+  color: var(--dim);
+}
+#card .when {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font: 400 11.5px/1.4 var(--mono);
+  color: var(--ink-2);
+}
+#card .when::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 8px var(--c);
+}
+#card .stats {
+  display: flex;
+  gap: 26px;
+  margin: 16px 0 0;
+}
+#card .stats div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+}
+#card .stats dd {
+  margin: 0;
+  font: 300 30px/1 var(--sans);
+  letter-spacing: -0.02em;
+  color: var(--c);
+}
+#card .stats dt,
+#card .skills dt {
+  font: 400 11px/1.2 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+#card .skills {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+#card .skills dd {
+  margin: 3px 0 0;
+  font: 300 14.5px/1.4 var(--sans);
+  color: var(--ink-2);
+}
+/* Experience: the role is the headline under the company. */
+#card[data-section='experience'] .role {
+  font: 400 15px/1.3 var(--sans);
+  color: var(--ink);
+}
+/* Projects: "what it is" leads, and the stack is labelled as the build. */
+#card[data-section='projects'] .role {
+  font: italic 300 15px/1.35 var(--sans);
+  color: var(--c);
+}
+#card[data-section='projects'] .tags::before {
+  content: 'Built with';
+  align-self: center;
+  margin-right: 4px;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+#card[data-section='toolkit'] {
+  width: min(380px, calc(100vw - 32px));
+}
+
+/* The log, grouped by section. */
+.zone {
+  margin-top: 56px;
+}
+.zone-h {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--c, var(--line));
+  font: 300 34px/1 var(--sans);
+  letter-spacing: -0.02em;
+}
+.zone-h .zone-n {
+  font: 500 12px/1 var(--mono);
+  letter-spacing: 0.2em;
+  color: var(--c, var(--sonar));
+}
+.zone-h em {
+  margin-left: auto;
+  font: 400 11px/1 var(--mono);
+  font-style: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.contacts > li[data-kind='school']::before {
+  content: 'roaming';
+}
+.contacts .when {
+  margin: 6px 0 0;
+  font: 400 12px/1.4 var(--mono);
+  color: var(--ink-2);
+}
+.contacts .stats,
+.contacts .skills {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+.contacts .stats div,
+.contacts .skills div {
+  display: flex;
+  gap: 12px;
+}
+.contacts .stats dt,
+.contacts .skills dt {
+  min-width: 9em;
+  font: 400 11px/1.6 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.contacts .stats dd,
+.contacts .skills dd {
+  margin: 0;
+  font: 300 15px/1.5 var(--sans);
+  color: var(--ink-2);
+}
+
+@media (max-width: 760px) {
+  #zone {
+    top: 84px;
+  }
+  #zone .zone-name {
+    font-size: 40px;
+  }
+  .gz span {
+    display: none;
+  }
+  .zone-h em {
+    margin-left: 0;
+    width: 100%;
+  }
+  .contacts .stats div,
+  .contacts .skills div {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #zone.show {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Log markers echo the gauge: diamonds for experience, circles for projects, a bar for education. */
+.zone[data-zone='projects'] .contacts > li::after {
+  border-radius: 50%;
+  transform: none;
+}
+.zone[data-zone='education'] .contacts > li::after {
+  width: 13px;
+  height: 5px;
+  top: 34px;
+  transform: none;
+}
+.zone[data-zone='toolkit'] .contacts > li::after {
+  border-radius: 50%;
+  transform: none;
+  background: transparent;
+  border: 1px dashed var(--c);
+}
+
+/* ─────────── Contact: back on board ─────────── */
+#aboard {
+  position: absolute;
+  z-index: 9;
+  left: 50%;
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  /* left: 50% would cap the shrink-to-fit width at half the screen, wrapping the text on phones. */
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  white-space: nowrap;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 4px;
+  padding: 14px 22px 14px 24px;
+  border: 1px solid rgba(255, 90, 69, 0.45);
+  border-radius: 18px;
+  background: rgba(20, 8, 8, 0.45);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 0 40px rgba(255, 90, 69, 0.12);
+  animation: aboard-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#aboard[hidden] {
+  display: none;
+}
+#aboard span {
+  font: 400 17px/1.1 var(--sans);
+  color: var(--ink);
+}
+#aboard i {
+  grid-row: span 2;
+  font: 400 22px/1 var(--mono);
+  font-style: normal;
+  color: #ff8a78;
+  animation: rise 1.8s ease-in-out infinite;
+}
+#aboard em {
+  font: 400 11px/1 var(--mono);
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ff8a78;
+}
+#aboard:hover,
+#aboard.hot {
+  border-color: rgba(255, 138, 120, 0.8);
+}
+@keyframes aboard-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+}
+@keyframes rise {
+  50% {
+    transform: translateY(-4px);
+  }
+}
+.gauge-marks button[data-section='contact'] .gauge-dot {
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  width: 15px;
+}
+.mk[data-section='contact'] .ring {
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  #aboard,
+  #aboard i {
+    animation: none;
+  }
+}
