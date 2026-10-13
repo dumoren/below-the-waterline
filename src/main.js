@@ -180,7 +180,16 @@ function start() {
   const boatOut = new THREE.Vector3(Math.cos(BOAT_ANGLE), 0, Math.sin(BOAT_ANGLE));
   const boatSide = new THREE.Vector3(-boatOut.z, 0, boatOut.x);
   const aboardLook = vessel.userData.base.clone().addScaledVector(boatOut, -2.5).add(new THREE.Vector3(0, 3.2, 0));
-  const aboardView = vessel.userData.base.clone().addScaledVector(boatOut, 9).addScaledVector(boatSide, 23).add(new THREE.Vector3(0, 6, 0));
+  // The vertical field of view is fixed, so on a wide screen the boat would sit small in a lot of
+  // empty sea: come in closer there. Phones (tall screens) keep the full stand-off. Set on resize.
+  const aboardView = new THREE.Vector3();
+  function placeAboardView(aspect) {
+    const wide = Math.min(1, Math.max(0, (aspect - 1) / 0.8));
+    const d = 1 - 0.24 * wide;
+    aboardView.copy(vessel.userData.base).addScaledVector(boatOut, 9 * d).addScaledVector(boatSide, 23 * d);
+    aboardView.y += 6 - 1.6 * wide;
+  }
+  placeAboardView(window.innerWidth / Math.max(1, window.innerHeight));
 
   /** The chain's point at a given height. */
   const chainAtY = (y) => {
@@ -307,6 +316,7 @@ function start() {
     // calculation divides by these.
     W = Math.max(1, window.innerWidth);
     H = Math.max(1, window.innerHeight);
+    placeAboardView(W / H);
     renderer.setSize(W, H, false);
     composer.setSize(W, H);
     composer.setPixelRatio(dpr);
@@ -1132,6 +1142,8 @@ function start() {
       const cw = card.offsetWidth;
       const ch = card.offsetHeight;
       let cx = x > W * 0.5 ? x - cw - 56 : x + 56;
+      // Aboard on a wide screen, the boat fills the middle: keep the card out on the open sea.
+      if (cardFor.vessel && W / H > 1.05) cx = Math.min(cx, Math.max(16, W * 0.05));
       cx = Math.max(16, Math.min(W - cw - 96, cx));
       const cy = Math.max(80, Math.min(H - ch - 24, y - ch * 0.45));
       card.style.left = `${cx}px`;
