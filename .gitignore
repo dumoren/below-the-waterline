@@ -1,5 +1,8 @@
 node_modules
 dist
-.env.local
-.env.*.local
 *.log
+
+# Local env files (Vercel writes a token to .env.local). Keep the example.
+.env*
+!.env.example
+.vercel
