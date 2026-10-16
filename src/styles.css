@@ -119,6 +119,145 @@ a {
 
 /* ─────────── HUD ─────────── */
 
+.weather-control {
+  position: absolute;
+  z-index: 12;
+  left: var(--gutter);
+  top: calc(76px + env(safe-area-inset-top));
+}
+#btn-weather {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--ink);
+  font: 400 12px/1 var(--mono);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s, background 0.2s;
+}
+#btn-weather:hover, #btn-weather[aria-expanded="true"] { border-color: rgba(127, 233, 255, 0.5); }
+#btn-weather > span:first-child { color: var(--sonar); font-size: 14px; opacity: 0.8; }
+.weather-panel {
+  width: min(330px, calc(100vw - 24px));
+  margin-top: 9px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(3, 15, 24, 0.97);
+  box-shadow: 0 12px 40px #0008;
+  max-height: calc(100svh - 155px - env(safe-area-inset-top));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.weather-panel[hidden], .weather-panel [hidden] { display: none; }
+.weather-panel h2 { margin: 0 0 10px; font: 500 17px/1.2 var(--sans); }
+.weather-panel p { margin: 0 0 15px; color: var(--ink-2); font: 400 13px/1.55 var(--sans); }
+.weather-panel button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--chip);
+  cursor: pointer;
+  font-size: 12px;
+}
+.weather-panel button:hover { border-color: var(--sonar); }
+.weather-panel button:disabled { opacity: 0.55; cursor: wait; }
+.weather-panel .weather-credit { margin: 14px 0 0; font-size: 11px; color: var(--dim); }
+.weather-panel #weather-clock { margin: 0 0 12px; color: var(--sonar); }
+.weather-panel.choosing-sky #weather-message,
+.weather-panel.choosing-sky #weather-refresh { display: none; }
+.weather-preview { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.weather-preview-label { display: block; margin-bottom: 10px; color: var(--ink-2); font-size: 12px; }
+.weather-panel .sky-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 10px;
+  padding: 10px 13px;
+  background: rgba(232, 244, 251, 0.05);
+  border: 1px solid var(--chip-line);
+  border-radius: 11px;
+  color: var(--ink);
+  font: 500 13px/1.4 var(--sans);
+  text-align: left;
+  transition: background 0.2s, border-color 0.2s;
+}
+.sky-picker[aria-expanded="true"] { background: rgba(127, 233, 255, 0.08); }
+.sky-chevron { color: var(--dim); font-size: 18px; transition: transform 0.2s; }
+.sky-picker[aria-expanded="true"] .sky-chevron { transform: rotate(180deg); }
+.sky-options {
+  max-height: min(280px, 40svh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 32px 6px;
+  scrollbar-gutter: stable;
+  margin: 0 0 12px;
+  padding: 5px;
+  background: #0b1d29;
+  border: 1px solid var(--chip-line);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 #ffffff04;
+}
+.sky-group-label {
+  position: sticky;
+  top: -5px;
+  z-index: 1;
+  padding: 13px 10px 7px;
+  background: #0b1d29;
+  color: var(--dim);
+  font: 400 10px/1.3 var(--mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.weather-panel .sky-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  font: 400 13px/1.3 var(--sans);
+  text-align: left;
+}
+.weather-panel .sky-option:hover,
+.weather-panel .sky-option:focus-visible { background: #e8f4fb0a; color: var(--ink); border-color: transparent; outline: 1px solid #7fe9ff55; outline-offset: -1px; }
+.weather-panel .sky-option[aria-selected="true"] { background: #7fe9ff14; color: var(--ink); }
+.sky-check { visibility: hidden; color: var(--sonar); font-size: 13px; }
+.sky-option[aria-selected="true"] .sky-check { visibility: visible; }
+.weather-panel, .sky-options {
+  scrollbar-width: thin;
+  scrollbar-color: #708c9b66 transparent;
+}
+.weather-panel::-webkit-scrollbar, .sky-options::-webkit-scrollbar { width: 6px; }
+.weather-panel::-webkit-scrollbar-button, .sky-options::-webkit-scrollbar-button { display: none; }
+.weather-panel::-webkit-scrollbar-track, .sky-options::-webkit-scrollbar-track { background: transparent; margin-block: 9px; }
+.weather-panel::-webkit-scrollbar-thumb, .sky-options::-webkit-scrollbar-thumb {
+  background: #708c9b66;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+.weather-panel::-webkit-scrollbar-thumb:hover, .sky-options::-webkit-scrollbar-thumb:hover { background: #9db9c899; }
+@media (max-width: 760px) {
+  .weather-control { left: 12px; top: calc(76px + env(safe-area-inset-top)); }
+  #btn-weather { font-size: 10px; gap: 6px; }
+}
+
 .hud {
   position: absolute;
   z-index: 10;
@@ -223,7 +362,8 @@ a {
 }
 /* Keep a 44px touch target around the smaller visual chip */
 .ico::before,
-.text-view::before {
+.text-view::before,
+#btn-weather::before {
   content: '';
   position: absolute;
   inset: -5px;
@@ -273,6 +413,18 @@ a {
   bottom: clamp(56px, 11vh, 120px);
   max-width: 44vw;
   will-change: opacity, transform;
+  isolation: isolate;
+  text-shadow: var(--text-glow);
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: -44px -80px -45px -65px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 25% 55%, rgba(2, 7, 13, 0.72), transparent 72%);
+  opacity: var(--sky-daylight, 0);
+  transition: opacity 1.5s;
 }
 .hero-k {
   margin: 0 0 18px;
@@ -909,6 +1061,7 @@ a {
   .tools { gap: 5px; }
   .tools .found { gap: 4px; padding: 0 10px; margin-right: 0; font-size: 11px; }
   .tools .found .sonar-ico { display: none; }
+  .tools .found .found-l { display: none; }
   .text-view { padding: 0 10px; font-size: 11px; white-space: nowrap; }
   .hero-k {
     display: inline-block;

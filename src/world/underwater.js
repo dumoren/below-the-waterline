@@ -136,6 +136,9 @@ export function buildShafts(uniforms, count = 16) {
     fragmentShader: /* glsl */ `
       uniform float uTime;
       uniform float uUnder;
+      uniform float uDaylight;
+      uniform float uCloud;
+      uniform float uMoonStrength;
       varying vec2 vUv;
       varying float vS;
       varying float vY;
@@ -145,7 +148,7 @@ export function buildShafts(uniforms, count = 16) {
         float along = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.8) * smoothstep(0.0, 0.06, vUv.y);
         float flick = 0.55 + 0.45 * sin(uTime * (0.5 + vS) + vS * 20.0) * sin(uTime * 0.37 + vS * 7.0);
         float camFade = smoothstep(-58.0, -8.0, cameraPosition.y);
-        vec3 col = vec3(0.35, 0.75, 0.8) * across * along * flick * 0.09 * camFade * uUnder;
+        vec3 col = vec3(0.35, 0.75, 0.8) * across * along * flick * 0.09 * camFade * uUnder * (uDaylight * (1.0 - uCloud * 0.8) + uMoonStrength * 0.08);
         gl_FragColor = vec4(col, 1.0);
       }
     `,

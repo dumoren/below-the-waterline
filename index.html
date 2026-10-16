@@ -46,6 +46,27 @@
         </nav>
       </header>
 
+      <div class="weather-control" id="weather-control">
+        <button type="button" id="btn-weather" aria-expanded="false" aria-controls="weather-panel">
+          <span aria-hidden="true">◒</span><span id="weather-status">St. John’s sky</span><span aria-hidden="true">⌄</span>
+        </button>
+        <section id="weather-panel" class="weather-panel" aria-label="St. John's sky settings" hidden>
+          <h2>St. John’s, out at sea</h2>
+          <p id="weather-clock" class="weather-credit"></p>
+          <p id="weather-message" role="status">Live weather and sun/moon lighting for St. John’s, Newfoundland.</p>
+          <button type="button" id="weather-refresh">Refresh St. John’s weather</button>
+          <div class="weather-preview">
+            <span id="weather-preview-label" class="weather-preview-label">Try another sky</span>
+            <button type="button" id="weather-preview" class="sky-picker" aria-haspopup="listbox" aria-expanded="false" aria-controls="weather-options" aria-labelledby="weather-preview-label weather-preview-value">
+              <span id="weather-preview-value">Live St. John’s weather</span><span class="sky-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div id="weather-options" class="sky-options" role="listbox" aria-labelledby="weather-preview-label" hidden></div>
+            <button type="button" id="weather-return" hidden>Return to St. John’s weather</button>
+          </div>
+          <p class="weather-credit">Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · St. John’s, Newfoundland.</p>
+        </section>
+      </div>
+
       <main id="stage-main" aria-label="Dive">
         <section class="hero" id="hero">
           <p class="hero-k">St. John's, Newfoundland · 47.56° N</p>

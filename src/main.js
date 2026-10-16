@@ -15,6 +15,9 @@ import { waterHeight } from './world/glsl.js';
 import { pose, pForCamY, theta, setEndAngle, P_SURF, M_PER_UNIT } from './path.js';
 import { buildPost } from './post.js';
 import { Sea } from './audio.js';
+import { stJohnsEnvironment, sceneConditions, stormGlow } from './environment.js';
+import { buildWeather } from './world/weather.js';
+import { buildLightning } from './world/lightning.js';
 
 const $ = (s) => document.querySelector(s);
 const root = document.documentElement;
@@ -59,11 +62,10 @@ function start() {
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1400);
 
   // ───────────── Shared uniforms ─────────────
-  const sunAz = 0.95 + Math.PI + 0.13;
-  const sunEl = 0.05;
   const U = {
     uTime: { value: 0 },
-    uSunDir: { value: new THREE.Vector3(Math.cos(sunAz) * Math.cos(sunEl), Math.sin(sunEl), Math.sin(sunAz) * Math.cos(sunEl)) },
+    uSunDir: { value: new THREE.Vector3() },
+    uMoonDir: { value: new THREE.Vector3() },
     uUnder: { value: 0 },
     uTorchDir: { value: new THREE.Vector3(0, 0, -1) },
     uTorch: { value: 0 },
@@ -91,6 +93,26 @@ function start() {
     uBoatSize: { value: new THREE.Vector2(SHIP.L / 2 + 0.3, SHIP.B / 2 + 0.25) },
   };
 
+  const environmentKeys = ['daylight', 'sunStrength', 'moonStrength', 'moonFraction', 'moonAngle', 'moonWaxing', 'twilight', 'ambient', 'cloud', 'rain', 'snow', 'fog', 'wind', 'ice', 'drizzle', 'thunder'];
+  U.uLightning = { value: 0 };
+  U.uStormDir = { value: new THREE.Vector3(-0.8, 0, -0.6) };
+  const uniformName = (key) => `u${key[0].toUpperCase()}${key.slice(1)}`;
+  environmentKeys.forEach((key) => { U[uniformName(key)] = { value: 0 }; });
+  let environmentTarget = null;
+  const sunTarget = new THREE.Vector3(), moonTarget = new THREE.Vector3();
+  function applyEnvironment(conditions, immediate = false) {
+    const first = !environmentTarget;
+    environmentTarget = conditions;
+    root.style.setProperty('--sky-daylight', conditions.daylight);
+    sunTarget.fromArray(conditions.sunDirection); moonTarget.fromArray(conditions.moonDirection);
+    if (first || immediate) {
+      environmentKeys.forEach((key) => { U[uniformName(key)].value = conditions[key]; });
+      U.uSunDir.value.copy(sunTarget); U.uMoonDir.value.copy(moonTarget);
+    }
+  }
+  const environment = stJohnsEnvironment(applyEnvironment);
+  window.addEventListener('pagehide', (e) => { if (!e.persisted) environment.dispose(); });
+
   // ───────────── World ─────────────
   const bergGeo = buildBergGeometry(5, 11);
   const routes = cameraRoutes(bergGeo);
@@ -103,14 +125,15 @@ function start() {
   const farMat = bergMaterial(farU);
   const heroLook = 0.95 + Math.PI;
   const farBergs = [];
-  for (const [da, dist, s, rot] of [
-    [-0.32, 230, 0.6, 1.2],
-    [0.22, 300, 0.42, 2.6],
-    [0.55, 190, 0.3, 4.1],
+  for (const [da, dist, s, rot, seed, width, height] of [
+    [-0.32, 230, 0.6, 1.2, 29, 1.25, 0.72],
+    [0.22, 300, 0.42, 2.6, 53, 0.85, 1.12],
+    [0.55, 190, 0.3, 4.1, 87, 1.5, 0.6],
   ]) {
-    const m = new THREE.Mesh(bergGeo, farMat);
+    const m = new THREE.Mesh(buildBergGeometry(3, seed), farMat);
+    m.name = `Distant iceberg ${farBergs.length + 1}`;
     m.position.set(Math.cos(heroLook + da) * dist, -0.5, Math.sin(heroLook + da) * dist);
-    m.scale.setScalar(s);
+    m.scale.set(s * width, s * height, s);
     m.rotation.y = rot;
     scene.add(m);
     farBergs.push(m);
@@ -125,7 +148,10 @@ function start() {
   const marineLife = buildMarineLife(U, { mobile });
   const schoolBeacon = buildSchoolBeacon(U);
   const bubbles = buildBubbles(U, mobile ? 160 : 320);
-  scene.add(water, sky, snow, shafts, seabed, fish, marineLife, schoolBeacon, bubbles);
+  const weatherParticles = buildWeather(U, { mobile, reduced });
+  const lightning = buildLightning(U);
+  scene.add(lightning);
+  scene.add(water, sky, snow, shafts, seabed, fish, marineLife, schoolBeacon, bubbles, weatherParticles);
   const ray = new THREE.Raycaster();
 
   // ───────────── Contact: the vessel, its anchor and chain ─────────────
@@ -679,6 +705,7 @@ function start() {
     'wheel',
     (e) => {
       if (root.classList.contains('log-open')) return;
+      if (e.target.closest?.('#weather-control')) return;
       if (e.target.closest?.('#card') && card.scrollHeight > card.clientHeight) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
@@ -734,7 +761,7 @@ function start() {
   canvas.addEventListener('pointerleave', () => (pointer.has = false));
 
   window.addEventListener('keydown', (e) => {
-    if (e.target.closest?.('input, textarea')) return;
+    if (e.target.closest?.('input, textarea, #weather-control')) return;
     if (root.classList.contains('log-open')) {
       if (e.key === 'Escape') setLog(false);
       return;
@@ -875,12 +902,25 @@ function start() {
   const upv = new THREE.Vector3();
   const lift = new THREE.Vector3();
   let hoverAcc = 0;
+  let thunderCycle = -1;
   let hovered = null;
   const perf = { n: 0, time: 0, done: false };
 
   function tick(dt, draw = true) {
     t += dt;
     U.uTime.value = t;
+    const envBlend = reduced ? 1 : 1 - Math.exp(-dt * 0.8);
+    environmentKeys.forEach((key) => { const uniform = U[uniformName(key)]; uniform.value += (environmentTarget[key] - uniform.value) * envBlend; });
+    U.uSunDir.value.lerp(sunTarget, envBlend).normalize();
+    U.uMoonDir.value.lerp(moonTarget, envBlend).normalize();
+    U.uLightning.value = stormGlow(t, U.uThunder.value, reduced);
+    lightning.userData.update(t, camera.aspect);
+    const stormCycle = Math.floor(t / 19);
+    // The rumble arrives several seconds after the distant bolt, using the sound toggle.
+    if (t % 19 >= 8 && stormCycle !== thunderCycle) {
+      thunderCycle = stormCycle;
+      if (U.uThunder.value > 0.2 && U.uUnder.value < 0.5) sea.thunder(U.uThunder.value);
+    }
 
     // Progress, with a gentle magnet onto contacts once scrolling stops.
     idle += dt;
@@ -1003,6 +1043,7 @@ function start() {
     // Above or below?
     const wh = waterHeight(camera.position.x, camera.position.z, t);
     under = camera.position.y < wh;
+    weatherParticles.visible = !under && Math.max(U.uRain.value, U.uSnow.value, U.uIce.value) > 0.01;
     underK += ((under ? 1 : 0) - underK) * (1 - Math.exp(-dt * 6));
     U.uUnder.value = under ? 1 : 0;
     const depthM = Math.max(0, (wh - camera.position.y) * M_PER_UNIT);
@@ -1266,6 +1307,12 @@ function start() {
       anchorPickVolume,
       seabedLife,
       U,
+      previewEnvironment: (date, weather) => {
+        const conditions = sceneConditions(new Date(date), weather);
+        applyEnvironment(conditions, true);
+        $('#weather-status').textContent = `Preview · ${conditions.period.toLowerCase()}`;
+        return conditions;
+      },
       routes,
       motion: { ascent, transit, returning },
       setP(v) {

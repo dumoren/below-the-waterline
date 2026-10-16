@@ -204,14 +204,14 @@ function shipMaterial(uniforms, color, { emissive = 0, hull = false, windows = f
           if (uEmissive > 0.0) {
             col = uColor * uEmissive;
           } else if (depth < 0.0) {
-            float ndl = max(dot(n, uSunDir), 0.0);
+            float ndl = max(dot(n, directLightDirection()), 0.0);
             float hemi = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
             vec3 sky = mix(vec3(0.045, 0.065, 0.11), vec3(0.25, 0.32, 0.44), hemi);
-            col = base * (sky + vec3(1.0, 0.58, 0.36) * pow(ndl, 1.2) * 1.05);
+            col = base * (sky * uAmbient + directLightColor() * pow(ndl, 1.2) * 1.05);
             vec3 R = reflect(-V, n);
             float fres = pow(clamp(1.0 - dot(n, V), 0.0, 1.0), 4.0);
             col += skyColor(R) * (0.05 + fres * 0.35) * ${spec.toFixed(2)};
-            col += vec3(1.0, 0.72, 0.48) * pow(max(dot(R, uSunDir), 0.0), 48.0) * 0.7 * ${spec.toFixed(2)};
+            col += directLightColor() * pow(max(dot(R, directLightDirection()), 0.0), 48.0) * 0.7 * ${spec.toFixed(2)};
             col += skyColor(R) * fres * 0.6 * wet; // wet steel mirrors the sky
           } else {
             col = base * 0.035 * absorb(depth) + torchLight(wp, n) * base * 0.9;
@@ -224,6 +224,7 @@ function shipMaterial(uniforms, color, { emissive = 0, hull = false, windows = f
           else col = mix(col * vec3(0.3, 0.6, 0.6), vec3(0.005, 0.03, 0.045), 1.0 - exp(-depth * 0.35));
         } else if (uUnder < 0.5) {
           col = mix(col, skyColor(normalize(vec3(-V.x, 0.03, -V.z))), smoothstep(80.0, 360.0, dist) * 0.5);
+          col = mix(col, skyColor(-V), airFog(dist));
         } else {
           col *= 0.25;
         }

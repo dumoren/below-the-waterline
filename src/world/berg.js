@@ -201,7 +201,7 @@ export function bergMaterial(uniforms) {
 
         if (depth < 0.0) {
           // Above water: a low warm sun, cold sky fill, glacial blue in the shadows.
-          float ndl = max(dot(n, uSunDir), 0.0);
+          float ndl = max(dot(n, directLightDirection()), 0.0);
           float facet = 0.82 + 0.26 * hash12(floor(n.xz * 23.0 + n.y * 11.0));
           vec3 sky = mix(vec3(0.1, 0.17, 0.28), vec3(0.42, 0.52, 0.66), pow(clamp(n.y * 0.5 + 0.5, 0.0, 1.0), 1.4));
           // Snow settles on the upward faces; steep walls show older, bluer compressed ice.
@@ -221,28 +221,34 @@ export function bergMaterial(uniforms) {
             crack = (1.0 - smoothstep(0.0, 0.035, abs(c - 0.5))) * (1.0 - snow * 0.8) * near;
           }
           vec3 albedo = mix(iceWall, vec3(0.95, 0.97, 1.0), snow);
-          col = albedo * (sky * 0.8 * facet + vec3(1.0, 0.62, 0.42) * pow(ndl, 1.3) * 1.0);
-          float shade = smoothstep(0.3, -0.5, dot(n, uSunDir));
-          col = mix(col, vec3(0.04, 0.24, 0.42) * facet * 0.85, shade * 0.58);
+          col = albedo * (sky * 0.8 * facet * uAmbient + directLightColor() * pow(ndl, 1.3));
+          float shade = smoothstep(0.3, -0.5, dot(n, directLightDirection()));
+          col = mix(col, vec3(0.04, 0.24, 0.42) * facet * 0.85 * uAmbient, shade * 0.58);
           // Light leaking through the shaded ice: a cold cyan glow from inside.
-          col += vec3(0.03, 0.2, 0.26) * shade * (1.0 - snow) * (0.6 + 0.4 * st);
+          col += vec3(0.03, 0.2, 0.26) * shade * (1.0 - snow) * (0.6 + 0.4 * st) * uAmbient;
           // Bands and cracks tint the lit result, so they read on the shaded (backlit) faces too.
           col = mix(col, col * vec3(0.5, 0.78, 1.0), bands * 0.75);
           col = mix(col, col * vec3(0.3, 0.6, 0.9), crack * 0.7);
           vec3 R = reflect(-V, n);
-          col += vec3(1.0, 0.78, 0.58) * pow(max(dot(R, uSunDir), 0.0), 36.0) * 0.9;
+          col += directLightColor() * pow(max(dot(R, directLightDirection()), 0.0), 36.0) * 0.22;
           col += skyColor(R) * fres * 0.35;
-          col += vec3(1.0, 0.6, 0.35) * pow(fres, 2.0) * pow(max(dot(-V, uSunDir), 0.0), 6.0) * 1.4;
+          col += directLightColor() * pow(fres, 2.0) * pow(max(dot(-V, directLightDirection()), 0.0), 6.0) * 0.45;
+          // Snow reflects light diffusely: keep the broad faces below the bloom threshold.
+          col = col / (vec3(1.0) + col * 0.8);
           col *= 1.0 - 0.35 * exp(depth * 2.2);
           // Wave-cut band at the waterline: wet, turquoise ice lit from below.
-          col = mix(col, vec3(0.1, 0.5, 0.55), exp(depth * 1.4) * 0.3);
-          col = mix(col, skyColor(normalize(vec3(-V.x, 0.03, -V.z))), smoothstep(60.0, 320.0, dist) * (0.35 + 0.65 * uDistant));
+          col = mix(col, vec3(0.1, 0.5, 0.55) * (0.15 + uAmbient * 0.85), exp(depth * 1.4) * 0.3);
+          // Retain low-contrast facets in clear air, then lose them naturally in fog.
+          // Use the background ray so distant ice cannot inherit a bright, unrelated sky strip.
+          float distanceHaze = smoothstep(80.0, 500.0, dist) * (0.35 + 0.4 * uDistant);
+          float atmosphere = 1.0 - (1.0 - distanceHaze) * (1.0 - airFog(dist));
+          col = mix(col, skyColor(-V), atmosphere);
         } else {
           // Below: sunlight filtered by depth, caustics, contacts glowing from inside.
           vec3 at = absorb(depth);
           float up = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
           float facet = 0.75 + 0.4 * hash12(floor(n.xz * 19.0 + n.y * 7.0));
-          col = vec3(0.32, 0.7, 0.9) * at * (0.025 + 0.75 * pow(up, 2.2)) * facet;
+          col = vec3(0.32, 0.7, 0.9) * at * (0.025 + 0.75 * pow(up, 2.2)) * facet * (0.3 + surfaceLight() * 0.7);
           col *= 0.82 + 0.36 * streaks(wp, n);
           // Melt scallops: shallow dishes with bright rims, as on real submerged ice.
           float scNear = smoothstep(55.0, 12.0, dist);
@@ -253,9 +259,9 @@ export function bergMaterial(uniforms) {
             col *= mix(1.0, dish + 0.32 * rim, scNear * 0.85);
           }
           // The ice glows turquoise from within near the surface, fading with depth.
-          col += vec3(0.02, 0.2, 0.22) * exp(-depth * 0.1) * (0.15 + 0.85 * fres);
+          col += vec3(0.02, 0.2, 0.22) * exp(-depth * 0.1) * (0.15 + 0.85 * fres) * surfaceLight();
           float c = caustic(wp.xz + wp.y * 0.35, uTime * 0.55);
-          col += vec3(0.55, 0.92, 1.0) * c * at * (0.25 + 0.75 * max(n.y, 0.0)) * 1.3 * smoothstep(45.0, 0.0, depth);
+          col += vec3(0.55, 0.92, 1.0) * c * at * (0.25 + 0.75 * max(n.y, 0.0)) * 1.3 * smoothstep(45.0, 0.0, depth) * surfaceLight();
           col += vec3(0.008, 0.028, 0.05) * (0.6 + fres);
           col += uwFogColor(wp.y) * fres * 0.5;
           col += contactGlow(wp);

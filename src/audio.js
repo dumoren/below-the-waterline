@@ -149,6 +149,30 @@ export class Sea {
     });
   }
 
+  thunder(strength = 1) {
+    if (!this.on) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 5, ctx.sampleRate);
+    const samples = buffer.getChannelData(0);
+    let brown = 0;
+    for (let i = 0; i < samples.length; i++) {
+      brown = (brown + (Math.random() * 2 - 1) * 0.03) / 1.03;
+      samples[i] = brown * 4;
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 230;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.65 * strength, now + 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 5);
+    source.connect(filter).connect(gain).connect(this.master);
+    source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+    source.start(now);
+  }
+
   creak() {
     const ctx = this.ctx;
     const now = ctx.currentTime;

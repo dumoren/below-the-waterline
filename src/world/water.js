@@ -65,7 +65,7 @@ export function buildWater(uniforms, { mobile }) {
         vec2 q = wp.xz * 0.9;
         float e = 0.08;
         float r0 = ripple(q);
-        vec3 n = normalize(vN + vec3(r0 - ripple(q + vec2(e, 0.0)), 0.0, r0 - ripple(q + vec2(0.0, e))) * 0.8);
+        vec3 n = normalize(vN + vec3(r0 - ripple(q + vec2(e, 0.0)), 0.0, r0 - ripple(q + vec2(0.0, e))) * (0.65 + uWind * 0.5 + uRain * 0.3));
         vec3 V = normalize(cameraPosition - wp);
         float dist = length(cameraPosition - wp);
 
@@ -94,13 +94,16 @@ export function buildWater(uniforms, { mobile }) {
           vec3 R = reflect(-V, n);
           R.y = abs(R.y);
           vec3 refl = skyColor(R);
-          float sunS = max(dot(R, uSunDir), 0.0);
-          vec3 spec = vec3(1.0, 0.66, 0.4) * (pow(sunS, 900.0) * 10.0 + pow(sunS, 220.0) * 0.3);
-          vec3 body = vec3(0.006, 0.03, 0.042) + vec3(0.012, 0.06, 0.07) * smoothstep(-0.5, 1.0, n.y);
+          float sunS = max(dot(R, directLightDirection()), 0.0);
+          vec3 spec = directLightColor() * (pow(sunS, 900.0) * 10.0 + pow(sunS, 220.0) * 0.3);
+          vec3 body = (vec3(0.006, 0.03, 0.042) + vec3(0.012, 0.06, 0.07) * smoothstep(-0.5, 1.0, n.y)) * (0.18 + uAmbient * 0.82);
           vec3 col = mix(body, refl, fres) + spec;
-          col = mix(col, vec3(0.8, 0.86, 0.9) * (0.55 + 0.45 * max(dot(n, uSunDir), 0.0)), foam * 0.85);
-          float haze = smoothstep(70.0, 440.0, dist);
-          if (haze > 0.0) col = mix(col, skyColor(normalize(vec3(-V.x, 0.015, -V.z))), haze);
+          col = mix(col, vec3(0.8, 0.86, 0.9) * (0.12 + uAmbient * 0.43 + 0.45 * max(dot(n, directLightDirection()), 0.0) * length(directLightColor())), foam * 0.85);
+          float haze = smoothstep(90.0, 440.0, dist);
+          float atmosphere = 1.0 - (1.0 - haze) * (1.0 - airFog(dist));
+          // Match the actual background ray, rather than sampling a fixed sky elevation.
+          // At the outer grid edge this becomes exactly the sky behind it, hiding the seam.
+          if (atmosphere > 0.0) col = mix(col, skyColor(-V), atmosphere);
           float alpha = max(mix(0.52, 0.97, fres), foam);
           alpha = mix(alpha, 1.0, smoothstep(60.0, 180.0, dist));
           gl_FragColor = vec4(col, alpha);
@@ -109,11 +112,11 @@ export function buildWater(uniforms, { mobile }) {
           float up = clamp(-V.y, 0.0, 1.0);
           float window = smoothstep(0.6, 0.72, up);
           vec3 sd = normalize(vec3(-V.x * 0.7 + n.x * 0.6, 0.35 + up, -V.z * 0.7 + n.z * 0.6));
-          vec3 sky = skyColor(sd) * 1.7 + vec3(1.0, 0.7, 0.45) * pow(max(dot(sd, uSunDir), 0.0), 12.0) * 0.6;
+          vec3 sky = skyColor(sd) * 1.7 + directLightColor() * pow(max(dot(sd, directLightDirection()), 0.0), 12.0) * 0.6;
           vec3 tir = uwWater(normalize(vec3(-V.x, 0.2, -V.z)), -2.0) * 0.9 + vec3(0.0, 0.02, 0.025) * r0;
           vec3 col = mix(tir, sky, window);
-          col += vec3(0.5, 0.85, 1.0) * pow(r0 * 0.6, 6.0) * window * 0.8;
-          col = mix(col, vec3(0.75, 0.85, 0.9), foam * 0.35 * window);
+          col += vec3(0.5, 0.85, 1.0) * pow(r0 * 0.6, 6.0) * window * 0.8 * surfaceLight();
+          col = mix(col, vec3(0.75, 0.85, 0.9) * (0.15 + uAmbient * 0.85), foam * 0.35 * window);
           col *= absorb(-cameraPosition.y * 0.6);
           col = mix(col, uwWater(-V, cameraPosition.y), uwFog(dist));
           gl_FragColor = vec4(col, 1.0);
@@ -150,19 +153,6 @@ export function buildSky(uniforms) {
           return;
         }
         vec3 col = skyColor(d);
-        // Low stratus, lit warm from underneath on the sun side.
-        if (d.y > 0.0) {
-          vec2 uv = d.xz / (d.y + 0.08) * 1.4 + vec2(uTime * 0.004, 0.0);
-          float c = vnoise(uv) * 0.55 + vnoise(uv * 2.1 + 3.0) * 0.3 + vnoise(uv * 4.3 - 1.0) * 0.15;
-          c = smoothstep(0.48, 0.85, c) * smoothstep(0.0, 0.08, d.y) * (1.0 - smoothstep(0.35, 0.8, d.y));
-          float s = pow(max(dot(d, uSunDir), 0.0), 3.0);
-          vec3 cloud = mix(vec3(0.1, 0.13, 0.2), vec3(0.95, 0.55, 0.38), s * 0.9);
-          col = mix(col, cloud, c * 0.75);
-        }
-        // A few early stars near the zenith.
-        vec2 sp = d.xz / (d.y + 1.0) * 180.0;
-        float st = step(0.9965, hash12(floor(sp))) * smoothstep(0.45, 0.9, d.y);
-        col += st * 0.5;
         gl_FragColor = vec4(col, 1.0);
       }
     `,

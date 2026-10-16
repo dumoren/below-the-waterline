@@ -1,6 +1,6 @@
 # Below the Waterline: Derek Umoren's portfolio
 
-An iceberg off St. John's at blue hour. The résumé is just the tip. Scroll to dive,
+An iceberg off St. John's beneath its real local sky. The résumé is just the tip. Scroll to dive,
 and the camera spirals down around the berg to the seabed, about 200 metres below. The work is frozen inside
 the ice as glowing crystals, and a sonar ping finds it.
 
@@ -18,6 +18,22 @@ the ice as glowing crystals, and a sonar ping finds it.
 - **Keys:** ↓ / ↑ next or previous contact, `Space` ping, `Enter` open (at the anchor: follow the chain up), `Esc` close, `Home` / `End`, `L` log, `M` sound.
 - **Sound** (off by default) synthesizes surf, a muffled underwater drone, pings with echo, ice creaks
   and a chime for each contact found.
+- **St. John’s sky:** weather loads automatically for the fixed scene coordinates, 47.56° N,
+  52.71° W. [Open-Meteo](https://open-meteo.com/) supplies clouds, precipitation, weather codes and wind.
+  [SunCalc](https://github.com/mourner/suncalc) supplies sun/moon positions and lunar illumination for
+  the same city. The displayed clock always uses `America/St_Johns`, including daylight saving time.
+  Visitor location, browser geolocation permissions and location preferences are not used.
+  Forecasts refresh every 15 minutes while visible; astronomy updates each minute. A recent forecast
+  is retained through brief outages (up to 30 minutes); offline lighting still uses St. John’s astronomy.
+  **Refresh St. John’s weather** performs a manual update.
+- **Try another sky** in the sky settings offers 18 illustrative previews: clear sky, passing clouds,
+  overcast, sunrise, golden hour, blue hour, moonlight, sea mist, dense fog, drizzle, heavy rain, thunderstorm,
+  hailstorm, snow flurries, sleet, blizzard, sunset showers and moonlit flurries. Previews use example dates and conditions, are labelled
+  **Preview**, and are not saved. **Return to St. John’s weather** resumes the real city conditions.
+  Precipitation supports simultaneous rain, snow and ice pellets, with wind-driven motion. Thunderstorms
+  have a slow cloud glow, disabled with reduced motion. Lighting, cloud, precipitation, fog and wind are independent continuous controls composed into one scene,
+  so rain can coincide with sunset or snow with moonlight without new renderer branches. Live WMO codes distinguish drizzle,
+  heavy rain, freezing rain, blowing snow and thunderstorms with hail.
 - The **dive log** (≡) lists everything as plain text. It's also the page visitors get without WebGL.
 - **Text view** in the header opens the dive log directly. Cards receive keyboard focus when opened;
   Escape or Close returns focus to their trigger (including the original item in text view).
@@ -44,6 +60,7 @@ npm run dev
 npm run build
 npm run test:camera
 npm run test:seabed
+npm run test:environment
 ```
 
 `dist/` is a static site with relative paths. It works on Vercel, Netlify, Cloudflare Pages or GitHub Pages.
