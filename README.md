@@ -19,7 +19,9 @@ the ice as glowing crystals, and a sonar ping finds it.
 - **Sound** (off by default) synthesizes surf, a muffled underwater drone, pings with echo, ice creaks
   and a chime for each contact found.
 - **St. John’s sky:** weather loads automatically for the fixed scene coordinates, 47.56° N,
-  52.71° W. [Open-Meteo](https://open-meteo.com/) supplies clouds, precipitation, weather codes and wind.
+  52.71° W. [Open-Meteo](https://open-meteo.com/en/docs) supplies cloud cover, separate rain/showers/snowfall,
+  visibility, direct solar radiation, weather codes and wind. Current precipitation totals are converted to hourly rates
+  using the API interval, and rain and snow can appear together. Missing optional measurements fall back to weather codes.
   [SunCalc](https://github.com/mourner/suncalc) supplies sun/moon positions and lunar illumination for
   the same city. The displayed clock always uses `America/St_Johns`, including daylight saving time.
   Visitor location, browser geolocation permissions and location preferences are not used.
@@ -31,9 +33,39 @@ the ice as glowing crystals, and a sonar ping finds it.
   hailstorm, snow flurries, sleet, blizzard, sunset showers and moonlit flurries. Previews use example dates and conditions, are labelled
   **Preview**, and are not saved. **Return to St. John’s weather** resumes the real city conditions.
   Precipitation supports simultaneous rain, snow and ice pellets, with wind-driven motion. Thunderstorms
-  have a slow cloud glow, disabled with reduced motion. Lighting, cloud, precipitation, fog and wind are independent continuous controls composed into one scene,
+  have a brief lightning stroke with synchronized cloud lighting, disabled with reduced motion. The flash rises in 25 ms,
+  fades out within 350 ms, and follows elapsed time even at low frame rates. Lighting, cloud, precipitation, fog and wind are independent continuous controls composed into one scene,
   so rain can coincide with sunset or snow with moonlight without new renderer branches. Live WMO codes distinguish drizzle,
   heavy rain, freezing rain, blowing snow and thunderstorms with hail.
+- **Night sky:** a fixed star field fades in as daylight and twilight recede, with cloud patches, fog,
+  precipitation and storms obscuring it. Sirius is the brightest blue-white point near the front centre of
+  the opening sky, framed for both desktop and portrait screens. Its placement and the surrounding field
+  are artistic rather than a dated star chart; the live Sun and Moon retain their astronomical positions.
+  Stars remain steady in reduced-motion mode and share the sky's water reflections.
+- **Tune this weather** opens a weather studio from the sky settings. Its 12 draggable dials and keyboard-accessible
+  sliders control daylight, sunlight, moonlight, twilight, cloud cover, visibility, rain, snow, ice/hail,
+  drizzle character, wind and storm strength. Start from live weather or any of the existing presets. Adjustments
+  preview immediately, keep the starting sun/moon positions and are labelled **Custom weather**. Percentages indicate
+  visual strength, not probability; 100% visibility represents 20 km or more, and 0% represents dense fog.
+  **Reset adjustments** restores the selected preset or latest live conditions. **Return to St. John’s weather** exits
+  manual mode. Edits stay in memory while browsing and are not saved across reloads. Live refreshes continue in the
+  background without replacing a custom scene. Reduced motion still disables lightning.
+- **One sky, one dive:** surface weather also shapes the water below. Sun and moon intensity, cloud cover,
+  atmospheric visibility and storm strength determine transmitted light, beams and caustics. Twilight gives
+  the upper water a warmer tint; snow and ice shift it towards blue. Wind, rain and hail increase suspended
+  particles, near-surface haze, drift and bubbles. Fog softens the incoming light without turning calm water
+  muddy. The disturbance fades with depth, while the torch, sonar, contact lights and anchor clearing remain
+  readable. Presets, live observations and manual adjustments all use the same continuous mapping.
+- **Offshore sea state:** live mode also loads [Open-Meteo's marine model](https://open-meteo.com/en/docs/marine-weather-api)
+  using a preferred sea grid cell near St. John’s. Significant wave height, period and incoming direction, plus
+  separate swell/wind-wave components, drive the surface. Surface current speed and outgoing direction drive
+  suspended-particle and bubble drift. Sky settings show the model values and valid time; hover the model time
+  for the selected offshore cell coordinates. This is a regional model, with limited coastal resolution.
+  Weather and marine requests succeed or fail independently. Marine data refreshes every 15 minutes while visible;
+  a recent response is kept for up to 30 minutes through outages, and model times older than 90 minutes are rejected.
+  Cached data and weather-based fallbacks are labelled. Presets and custom weather use illustrative seas, and returning
+  to live mode restores the marine model. Underwater clarity, colour and the depth profile of the current remain
+  artistic estimates. They are not measurements supplied by this feed.
 - The **dive log** (≡) lists everything as plain text. It's also the page visitors get without WebGL.
 - **Text view** in the header opens the dive log directly. Cards receive keyboard focus when opened;
   Escape or Close returns focus to their trigger (including the original item in text view).
@@ -79,6 +111,33 @@ Add a job or project by adding an `<li>` to the right section.
 ## How it's made
 
 The whole scene is procedural. There are no model or texture files.
+
+Weather composition is defined in `src/weather-parameters.js`: `WEATHER_PARAMETERS` describes the shared 0–1
+controls, `weatherParameters()` extracts them from a scene, and `composeWeatherConditions()` applies them while
+retaining astronomy. `src/environment.js` maps API observations and the 18 presets into that model;
+`src/weather-controls.js` builds the studio controls. Visibility feeds the existing atmospheric fog rendering.
+Direct sunlight uses solar irradiance when available, with the real solar horizon still respected in live mode.
+
+`src/underwater-environment.js` maps those normalized controls to `waterLight`, `waterDirect`, `waterTurbidity`,
+`waterShafts`, `waterCaustics`, `waterMotion`, `waterParticles` and an RGB `waterTint`. Edit its weights to tune
+the relationship between surface and underwater art direction. The shared shaders in `src/world/glsl.js`
+apply depth falloff, colour filtering and distance haze; the ice, fish, habitat and particle shaders use the
+same values. Changes interpolate with the sky, while dial edits preview immediately. New particle, bubble,
+shaft and caustic motion uses a separate clock that stays still when reduced motion is requested.
+
+`src/marine-environment.js` decodes the marine response and builds three directional wave components. The total
+energy follows significant wave height (`Hs = 4 × RMS elevation`), and deep-water dispersion sets wavelength from
+period. `src/scene-scale.js` shares metres-per-unit and the geographic compass with astronomy. Incoming wave bearings
+are reversed for propagation; current bearings already describe the direction of flow. Extreme rendered significant
+height is capped at 8 m to keep the dive usable, with a visible note when this happens. Missing current data produces
+no model-driven drift. Current speed converts from km/h to scene units/second; its influence fades with depth because
+the feed only describes the surface current.
+
+The GPU surface, normals, submerged-material waterline and lens crossing share wave coefficients and phases with the
+CPU camera depth and ship heave/roll. Wave phases and current displacement are integrated each frame, avoiding phase
+jumps from multiplying a new period or current direction by the entire elapsed session time. Forecast changes blend
+smoothly. Reduced motion holds both accumulators still. `npm run test:environment` includes marine units, direction,
+freshness, spectrum-energy and CPU gradient checks.
 
 - **Iceberg:** an icosphere remapped onto a hand-shaped profile, with a leaning pinnacle above the water and a
   lobed belly six times deeper below, broken up with simplex noise. Facets come from screen-space derivatives.

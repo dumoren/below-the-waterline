@@ -39,7 +39,7 @@ export function buildMarineLife(U, { mobile }) {
         local.xz += vec2(sin(phase + local.y * 1.4), cos(phase * 0.7 + local.y)) * max(0.0, -local.y) * 0.09;
         vec3 wp = centre + local * (0.65 + aSeed.w * 0.65);
         float fog = uwFog(distance(cameraPosition, wp));
-        vec3 silver = vec3(0.38, 0.5, 0.54) * (0.6 + 0.3 * sin(phase)) + torchLight(wp, vec3(0.0, 1.0, 0.0));
+        vec3 silver = vec3(0.38, 0.5, 0.54) * (0.6 + 0.3 * sin(phase)) * uwAmbientColor(wp.y) + torchLight(wp, vec3(0.0, 1.0, 0.0));
         vCol = mix(silver, uwFogColor(cameraPosition.y), fog);
         vAlpha = (position.y < -0.1 ? 0.4 : 0.24) * (1.0 - fog * 0.65);
         gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);

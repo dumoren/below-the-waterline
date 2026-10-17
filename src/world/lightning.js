@@ -48,21 +48,18 @@ export function buildLightning(uniforms) {
       }
     `,
     fragmentShader: /* glsl */ `
-      uniform float uTime;
       uniform float uLightning;
       varying float vEdge;
       varying float vEnergy;
       void main() {
-        float phase = mod(uTime, 19.0);
-        // A single return stroke, then a trailing afterglow; no repeated flicker.
-        float stroke = smoothstep(4.72, 4.86, phase) * exp(-max(0.0, phase - 4.86) * 5.0);
+        // The exact same pulse lights the channel, clouds and water together.
+        float stroke = clamp(uLightning / 0.32, 0.0, 1.0);
         float x = abs(vEdge);
         float aa = max(fwidth(vEdge), 0.01);
         float core = 1.0 - smoothstep(0.055 - aa, 0.055 + aa, x);
         float corona = exp(-x * 5.0) * (1.0 - smoothstep(0.75, 1.0, x));
         vec3 light = vec3(0.88, 0.94, 1.0) * core * 7.0 + vec3(0.22, 0.4, 0.85) * corona * 0.8;
-        float enabled = smoothstep(0.001, 0.02, uLightning);
-        gl_FragColor = vec4(light, stroke * vEnergy * enabled);
+        gl_FragColor = vec4(light, stroke * vEnergy);
       }
     `,
   });

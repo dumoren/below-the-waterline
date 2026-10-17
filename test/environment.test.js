@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { sceneConditions, decodeWeather, fetchStJohnsWeather, ST_JOHNS, stJohnsTime, WEATHER_PRESETS, previewConditions, stormGlow } from '../src/environment.js';
+import { WEATHER_PARAMETERS, normalizeWeatherParameters, weatherParameters, composeWeatherConditions } from '../src/weather-parameters.js';
 
 const clear = decodeWeather({ cloud_cover: 0, precipitation: 0, weather_code: 0, wind_speed_10m: 5 });
 
@@ -53,6 +54,7 @@ test('rain, snow, fog and overcast produce different conditions; invalid data is
   assert.equal(snow.rain, 0); assert.ok(snow.snow > 0);
   assert.equal(decodeWeather({ ...current, weather_code: 45, precipitation: 0 }).fog, 0.85);
   assert.equal(decodeWeather({ ...current, weather_code: 3, precipitation: 0 }).description, 'Overcast');
+  assert.equal(decodeWeather({ ...current, cloud_cover: 84, weather_code: 3, precipitation: 0 }).description, 'Overcast');
   assert.throws(() => decodeWeather(null));
   assert.throws(() => decodeWeather({ ...current, cloud_cover: null }));
   const day = new Date('2026-10-15T12:00:00-02:30');
@@ -102,13 +104,20 @@ test('live weather distinguishes drizzle, heavy rain, freezing rain and hail cod
   assert.equal(decodeWeather({ ...current, weather_code: 73, wind_speed_10m: 65 }).description, 'Blowing snow');
 });
 
-test('storm glow is slow, bounded, and disabled by reduced motion', () => {
-  for (let t = 0; t < 60; t += 0.1) {
+test('lightning has a fast attack and short decay, with one bounded pulse per cycle', () => {
+  for (let t = 0; t < 60; t += 0.01) {
     assert.equal(stormGlow(t, 1, true), 0);
     assert.equal(stormGlow(t, 0), 0);
     assert.ok(stormGlow(t, 1) >= 0 && stormGlow(t, 1) <= 0.32);
-    assert.ok(Math.abs(stormGlow(t, 1) - stormGlow(t + 0.1, 1)) < 0.05);
+    const phase = t % 19;
+    if (phase < 4.8 || phase >= 5.15) assert.equal(stormGlow(t, 1), 0);
   }
+  assert.equal(stormGlow(4.79, 1), 0);
+  assert.ok(stormGlow(4.825, 1) > 0.31);
+  assert.ok(stormGlow(4.975, 1) < 0.03);
+  assert.ok(stormGlow(5.1, 1) < 0.002);
+  assert.equal(stormGlow(5.16, 1), 0);
+  assert.ok(Math.abs(stormGlow(23.825, 0.5) - stormGlow(4.825, 1) * 0.5) < 1e-12);
 });
 
 test('composed conditions retain astronomy while blending independent weather elements', () => {
@@ -122,4 +131,65 @@ test('composed conditions retain astronomy while blending independent weather el
   assert.deepEqual(snowyMoon.moonDirection, clearMoon.moonDirection);
   assert.ok(snowyMoon.snow > 0 && snowyMoon.moonStrength > 0);
   assert.ok(snowyMoon.moonStrength < clearMoon.moonStrength);
+});
+
+test('weather studio composes independent light, visibility and simultaneous precipitation', () => {
+  const base = previewConditions('sunset');
+  const original = structuredClone(base);
+  const custom = composeWeatherConditions(base, {
+    sun: 0.15, daylight: 0.5, moon: 0.3, twilight: 0.6, cloud: 0.9, visibility: 0.3,
+    rain: 0.45, snow: 0.2, ice: 0.6, drizzle: 0.8, wind: 0.7, thunder: 0.4,
+  });
+  assert.equal(custom.sunStrength, 0.15);
+  assert.equal(custom.moonStrength, 0.3);
+  assert.equal(custom.fog, 0.7);
+  assert.equal(custom.rain, 0.45); assert.equal(custom.snow, 0.2); assert.equal(custom.ice, 0.6);
+  assert.deepEqual(custom.sunDirection, base.sunDirection);
+  assert.deepEqual(custom.moonDirection, base.moonDirection);
+  assert.equal(custom.moonFraction, base.moonFraction);
+  assert.deepEqual(base, original);
+  // A cloud-only edit must retain the explicitly chosen sunlight and rainfall.
+  const cloudEdit = composeWeatherConditions(custom, { cloud: 0 });
+  assert.equal(cloudEdit.sunStrength, 0.15); assert.equal(cloudEdit.rain, 0.45);
+  for (const { id } of WEATHER_PRESETS) {
+    const preset = previewConditions(id);
+    assert.deepEqual(composeWeatherConditions(preset, weatherParameters(preset)), preset);
+  }
+});
+
+test('all weather controls clamp invalid input and preserve zero', () => {
+  const p = normalizeWeatherParameters({ rain: 2, snow: -4, wind: NaN, sun: Infinity, visibility: null, moon: 0 });
+  assert.equal(p.rain, 1); assert.equal(p.snow, 0); assert.equal(p.moon, 0);
+  assert.equal(p.wind, 0.15); assert.equal(p.sun, 1); assert.equal(p.visibility, 1);
+  assert.deepEqual(Object.keys(p), WEATHER_PARAMETERS.map((parameter) => parameter.key));
+  const scene = sceneConditions(new Date('2026-10-15T12:00:00-02:30'), { cloud: 5, rain: NaN, fog: -1 });
+  assert.equal(scene.cloud, 1); assert.equal(scene.rain, 0); assert.equal(scene.fog, 0);
+});
+
+test('measured visibility, solar radiation and mixed precipitation override weather-code guesses', () => {
+  const observation = {
+    cloud_cover: 58, precipitation: 0.2, weather_code: 73, wind_speed_10m: 21,
+    rain: 0.08, showers: 0.02, snowfall: 0.05, visibility: 6000,
+    direct_normal_irradiance_instant: 150, interval: 900,
+  };
+  const decoded = decodeWeather(observation);
+  assert.equal(decoded.visibility, 0.3); assert.equal(decoded.fog, 0.7); assert.equal(decoded.sun, 0.15);
+  assert.equal(decoded.rain, 0.1); assert.equal(decoded.snow, 0.1); assert.equal(decoded.wind, 0.3);
+  const daylight = sceneConditions(new Date('2026-10-15T12:00:00-02:30'), decoded);
+  assert.equal(daylight.sunStrength, 0.15);
+  assert.equal(sceneConditions(new Date('2026-10-15T23:23:00-02:30'), decoded).sunStrength, 0);
+  const dry = decodeWeather({ ...observation, rain: 0, showers: 0, snowfall: 0, visibility: 40_000, direct_normal_irradiance_instant: 0 });
+  assert.equal(dry.rain, 0); assert.equal(dry.snow, 0); assert.equal(dry.fog, 0); assert.equal(dry.sun, 0);
+  const missing = decodeWeather({ ...observation, rain: null, snowfall: null, visibility: null, direct_normal_irradiance_instant: null });
+  assert.ok(missing.snow > 0); assert.ok(Number.isFinite(missing.visibility)); assert.equal(missing.sun, undefined);
+});
+
+test('live weather requests the individual observations used by the studio', async () => {
+  await fetchStJohnsWeather({ fetcher: async (url) => {
+    const fields = url.searchParams.get('current').split(',');
+    for (const field of ['rain', 'showers', 'snowfall', 'visibility', 'direct_normal_irradiance_instant']) assert.ok(fields.includes(field));
+    assert.equal(url.searchParams.get('wind_speed_unit'), 'kmh');
+    assert.equal(url.searchParams.get('precipitation_unit'), 'mm');
+    return { ok: true, json: async () => ({ current: { cloud_cover: 58, precipitation: 0, weather_code: 2, wind_speed_10m: 21, visibility: 6000 } }) };
+  } });
 });

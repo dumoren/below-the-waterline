@@ -1,13 +1,17 @@
 import { getPosition, getMoonPosition, getMoonIllumination } from 'suncalc';
+import { CLEAR_VISIBILITY_METRES, normalizeWeatherParameters, weatherParameters, composeWeatherConditions } from './weather-parameters.js';
+import { weatherControls } from './weather-controls.js';
+import { SCENE_WEST, SCENE_LOCATION } from './scene-scale.js';
+import { fetchStJohnsMarine, composeMarineEnvironment, MARINE_MAX_AGE } from './marine-environment.js';
 
 const RAD = Math.PI / 180;
-export const ST_JOHNS = Object.freeze({ latitude: 47.56, longitude: -52.71, timeZone: 'America/St_Johns' });
+export const ST_JOHNS = SCENE_LOCATION;
 const cityClock = new Intl.DateTimeFormat('en-CA', { timeZone: ST_JOHNS.timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
 export const stJohnsTime = (date = new Date()) => cityClock.format(date);
 const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 const smooth = (lo, hi, v) => { const t = clamp((v - lo) / (hi - lo)); return t * t * (3 - 2 * t); };
 // Scene compass: the original sunset sits west of the opening view.
-const WEST = 0.95 + Math.PI + 0.13;
+const WEST = SCENE_WEST;
 function direction(azimuth, altitude) {
   const a = WEST + (azimuth - 270) * RAD, h = altitude * RAD;
   return [Math.cos(a) * Math.cos(h), Math.sin(h), Math.sin(a) * Math.cos(h)];
@@ -29,16 +33,24 @@ export function decodeWeather(current) {
   const heavy = [65, 67, 75, 82, 86, 97, 99].includes(code);
   const wind = clamp(current.wind_speed_10m / 70);
   const intensity = Math.max(heavy ? 0.8 : drizzle ? 0.08 : 0.2, precipitation);
+  const fallbackFog = fog ? (code === 48 ? 0.98 : 0.85) : snow && wind > 0.6 ? 0.6 : drizzle ? 0.22 : clamp(current.precipitation / 12, 0, 0.4);
+  // Current precipitation totals cover `interval` seconds. Convert to hourly rates
+  // before scaling visual intensity; missing optional observations retain WMO fallbacks.
+  const rate = Number.isFinite(current.interval) && current.interval > 0 ? 3600 / current.interval : 1;
+  const hasRain = Number.isFinite(current.rain) && Number.isFinite(current.showers);
+  const visibility = Number.isFinite(current.visibility) ? clamp(current.visibility / CLEAR_VISIBILITY_METRES) : 1 - fallbackFog;
   return {
     cloud: clamp(current.cloud_cover / 100),
-    rain: wet ? intensity : 0,
-    snow: snow ? intensity : 0,
+    rain: hasRain ? clamp((Math.max(0, current.rain) + Math.max(0, current.showers)) * rate / 4) : wet ? intensity : 0,
+    snow: Number.isFinite(current.snowfall) ? clamp(Math.max(0, current.snowfall) * rate / 2) : snow ? intensity : 0,
     ice: hail ? (code === 99 ? 0.9 : 0.4) : freezing ? 0.25 : code === 77 ? 0.5 : 0,
     thunder: thunder ? 1 : 0,
     drizzle: drizzle ? 1 : 0,
-    fog: fog ? (code === 48 ? 0.98 : 0.85) : snow && wind > 0.6 ? 0.6 : drizzle ? 0.22 : clamp(current.precipitation / 12, 0, 0.4),
+    fog: 1 - visibility,
+    visibility,
+    ...(Number.isFinite(current.direct_normal_irradiance_instant) ? { sun: clamp(current.direct_normal_irradiance_instant / 1000) } : {}),
     wind,
-    description: hail ? 'Thunder & hail' : thunder ? 'Thunderstorms' : freezing ? 'Freezing rain' : drizzle ? 'Drizzle' : snow && wind > 0.6 ? 'Blowing snow' : snow ? (heavy ? 'Heavy snow' : 'Snow flurries') : heavy ? 'Heavy rain' : wet ? 'Rain' : fog ? 'Fog' : current.cloud_cover > 85 ? 'Overcast' : current.cloud_cover > 35 ? 'Partly cloudy' : 'Clear',
+    description: hail ? 'Thunder & hail' : thunder ? 'Thunderstorms' : freezing ? 'Freezing rain' : drizzle ? 'Drizzle' : snow && wind > 0.6 ? 'Blowing snow' : snow ? (heavy ? 'Heavy snow' : 'Snow flurries') : heavy ? 'Heavy rain' : wet ? 'Rain' : fog ? 'Fog' : code === 3 || current.cloud_cover > 85 ? 'Overcast' : code === 2 || current.cloud_cover > 35 ? 'Partly cloudy' : 'Clear',
   };
 }
 
@@ -73,12 +85,15 @@ export function previewConditions(id) {
   };
 }
 
-// A long, low cloud glow, spaced at least 17 seconds apart. No rapid flashes.
+// One brief return stroke every 19 seconds, shared by the bolt and cloud lighting.
 export function stormGlow(time, strength, reduced = false) {
   if (reduced || strength <= 0) return 0;
   const phase = ((time % 19) + 19) % 19;
-  const pulse = Math.max(0, 1 - Math.abs(phase - 5) / 1.4);
-  return Math.sin(pulse * Math.PI / 2) ** 2 * strength * 0.32;
+  const age = phase - 4.8;
+  if (age < 0 || age >= 0.35) return 0;
+  const attack = smooth(0, 0.025, age);
+  const decay = Math.exp(-Math.max(0, age - 0.025) * 18);
+  return attack * decay * (1 - smooth(0.28, 0.35, age)) * strength * 0.32;
 }
 
 export function sceneConditions(date = new Date(), weather = null) {
@@ -88,23 +103,20 @@ export function sceneConditions(date = new Date(), weather = null) {
   const sun = getPosition(date, latitude, longitude);
   const moon = getMoonPosition(date, latitude, longitude);
   const illumination = getMoonIllumination(date);
-  const cloud = weather?.cloud ?? 0.18;
+  const parameters = normalizeWeatherParameters({ ...weather, visibility: weather?.visibility ?? 1 - (weather?.fog ?? 0) });
+  const { cloud } = parameters;
   const daylight = smooth(-6, 14, sun.altitude);
-  const sunStrength = smooth(-0.8, 2, sun.altitude) * (1 - cloud * 0.92);
+  const sunStrength = smooth(-0.8, 2, sun.altitude) * (Number.isFinite(weather?.sun) ? parameters.sun : 1 - cloud * 0.92);
   const moonStrength = smooth(-0.3, 3, moon.altitude) * (1 - daylight) * illumination.fraction * (1 - cloud * 0.94);
-  return {
+  const twilight = smooth(-16, -4, sun.altitude) * (1 - smooth(0, 14, sun.altitude));
+  return composeWeatherConditions({
     sunDirection: direction(sun.azimuth, sun.altitude),
     moonDirection: direction(moon.azimuth, moon.altitude),
     moonFraction: illumination.fraction,
     moonAngle: (illumination.angle - moon.parallacticAngle) * RAD,
     moonWaxing: illumination.waxing ? 1 : -1,
-    sunStrength, moonStrength, daylight,
-    twilight: smooth(-16, -4, sun.altitude) * (1 - smooth(0, 14, sun.altitude)),
-    ambient: (0.16 + daylight * 0.84) * (1 - cloud * 0.3),
-    cloud, rain: weather?.rain ?? 0, snow: weather?.snow ?? 0, fog: weather?.fog ?? 0, wind: weather?.wind ?? 0.15,
-    ice: weather?.ice ?? 0, drizzle: weather?.drizzle ?? 0, thunder: weather?.thunder ?? 0,
     period: sun.altitude > 0 ? 'Day' : sun.altitude > -12 ? 'Twilight' : 'Night',
-  };
+  }, { ...parameters, daylight, sun: sunStrength, moon: moonStrength, twilight });
 }
 
 export async function fetchStJohnsWeather({ signal, fetcher = fetch } = {}) {
@@ -112,7 +124,8 @@ export async function fetchStJohnsWeather({ signal, fetcher = fetch } = {}) {
   // Always the portfolio's city. No visitor location or location permission is used.
   url.search = new URLSearchParams({
     latitude: ST_JOHNS.latitude.toFixed(2), longitude: ST_JOHNS.longitude.toFixed(2),
-    current: 'cloud_cover,precipitation,weather_code,wind_speed_10m', forecast_days: '1',
+    current: 'cloud_cover,precipitation,rain,showers,snowfall,visibility,direct_normal_irradiance_instant,weather_code,wind_speed_10m',
+    wind_speed_unit: 'kmh', precipitation_unit: 'mm', forecast_days: '1',
   });
   const response = await fetcher(url, { signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
   if (!response.ok) throw new Error('Weather is unavailable');
@@ -132,7 +145,26 @@ export function stJohnsEnvironment(onChange) {
   const pickerValue = control.querySelector('#weather-preview-value');
   const options = control.querySelector('#weather-options');
   const returnCity = control.querySelector('#weather-return');
+  const overview = control.querySelector('#weather-overview');
+  const studio = control.querySelector('#weather-studio');
+  const tuneButton = control.querySelector('#weather-tune');
+  const backButton = control.querySelector('#weather-studio-back');
+  const resetButton = control.querySelector('#weather-reset');
+  const studioSource = control.querySelector('#weather-studio-source');
+  const marineStatus = control.querySelector('#marine-status');
+  const marineDetails = control.querySelector('#marine-details');
+  const marineTime = control.querySelector('#marine-time');
+  let custom = null, customBase = null, customSource = '', currentConditions = null;
+  const dials = weatherControls(control.querySelector('#weather-parameters'), (key, value) => {
+    if (!custom) {
+      customBase = currentConditions;
+      customSource = preview ? WEATHER_PRESETS.find((p) => p.id === preview).label : 'St. John’s weather';
+    }
+    custom = { ...weatherParameters(currentConditions), [key]: value };
+    publish();
+  });
   let preview = '', weather = null, fetchedAt = 0, attemptAt = 0;
+  let marine = null, marineFetchedAt = 0, marineFailed = false;
   let loading = false, request = null, disposed = false, generation = 0;
   const MINUTE = 60_000;
   const groups = new Map();
@@ -157,23 +189,38 @@ export function stJohnsEnvironment(onChange) {
   function publish() {
     if (disposed) return;
     if (weather && Date.now() - fetchedAt > 30 * MINUTE) weather = null;
-    const conditions = previewConditions(preview) || sceneConditions(new Date(), weather);
-    status.textContent = preview ? `Preview · ${conditions.label}` : `St. John's · ${weather ? weather.description : conditions.period.toLowerCase()}`;
-    clock.textContent = `St. John's · ${stJohnsTime()}${preview ? ' · example sky' : ''}`;
-    returnCity.hidden = !preview;
-    pickerValue.textContent = preview ? WEATHER_PRESETS.find((p) => p.id === preview).label : 'Live St. John’s weather';
+    if (marine && (Date.now() - marineFetchedAt > 30 * MINUTE || Date.now() - marine.validAt > MARINE_MAX_AGE)) marine = null;
+    const sky = custom ? composeWeatherConditions(customBase, custom) : previewConditions(preview) || sceneConditions(new Date(), weather);
+    const conditions = composeMarineEnvironment(sky, !custom && !preview ? marine : null);
+    const sea = conditions.sea;
+    const compass = (angle) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(angle / 45) % 8];
+    marineStatus.textContent = sea.source === 'model' ? `Offshore sea · ${marineFailed ? 'cached ' : ''}marine model` : preview || custom ? 'Sea · illustrative preview' : loading ? 'Sea · loading marine model…' : 'Sea · weather-based estimate';
+    marineDetails.textContent = `Waves ${sea.data.waves.height.toFixed(1)} m · ${sea.data.waves.period.toFixed(1)} s · from ${compass(sea.data.waves.direction)}. ${sea.data.current ? `Surface current ${sea.data.current.speed.toFixed(1)} km/h toward ${compass(sea.data.current.direction)}.` : 'Surface current unavailable.'}${sea.limited ? ' Extreme wave motion is softened for the dive.' : ''}`;
+    marineTime.textContent = sea.source === 'model' ? `Model time · ${stJohnsTime(new Date(sea.data.validAt))}` : 'Wave motion estimated from this weather mix.';
+    marineTime.title = sea.source === 'model' ? `Offshore model cell: ${sea.data.latitude ?? 'unknown'}°, ${sea.data.longitude ?? 'unknown'}°. ${new Date(sea.data.validAt).toISOString()}` : '';
+    marineStatus.dataset.source = sea.source;
+    currentConditions = conditions;
+    status.textContent = custom ? 'Preview · Custom weather' : preview ? `Preview · ${conditions.label}` : `St. John's · ${weather ? weather.description : conditions.period.toLowerCase()}`;
+    clock.textContent = `St. John's · ${stJohnsTime()}${preview || custom ? ' · example sky' : ''}`;
+    returnCity.hidden = !preview && !custom;
+    pickerValue.textContent = custom ? 'Custom weather' : preview ? WEATHER_PRESETS.find((p) => p.id === preview).label : 'Live St. John’s weather';
+    panel.dataset.mode = custom ? 'custom' : preview ? 'preset' : 'live';
+    studioSource.textContent = `Based on ${custom ? customSource : preview ? conditions.label : 'St. John’s weather'}${custom ? ' · adjusted' : ''}`;
+    resetButton.disabled = !custom;
+    dials.setValues(weatherParameters(conditions));
     optionButtons.forEach((button) => {
-      const selected = button.dataset.value === preview;
+      const selected = !custom && button.dataset.value === preview;
       button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
     });
     toggle.setAttribute('aria-label', `${status.textContent}. St. John's sky settings`);
     refreshButton.disabled = loading;
     refreshButton.textContent = loading ? 'Updating weather…' : 'Refresh St. John’s weather';
-    message.textContent = preview ? 'An example made from the same light, cloud, precipitation, fog and wind controls as the live scene.'
+    message.textContent = custom ? 'Your own mix of light, clouds, visibility and precipitation. Tune it again or return to the live sky.'
+      : preview ? 'An example made from the same light, cloud, precipitation, fog and wind controls as the live scene.'
       : weather ? 'Live weather and sun/moon lighting for St. John’s, Newfoundland.'
       : loading ? 'Getting the latest weather for St. John’s. Its sun and moon are already in position.'
       : 'Weather is temporarily unavailable. Lighting still follows the real St. John’s sun and moon.';
-    onChange(conditions);
+    onChange(conditions, Boolean(custom));
   }
   async function refresh() {
     if (disposed || loading || document.hidden) return;
@@ -182,11 +229,19 @@ export function stJohnsEnvironment(onChange) {
     const controller = new AbortController(); request = controller;
     const timeout = setTimeout(() => controller.abort(), 8000);
     try {
-      const fresh = await fetchStJohnsWeather({ signal: controller.signal });
-      if (disposed || id !== generation) return;
-      weather = fresh; fetchedAt = Date.now();
-    } catch {
-      // Keep a recent observation through a brief outage; astronomy stays accurate offline.
+      // Independent feeds: one failed response must not discard the other feed.
+      await Promise.allSettled([
+        fetchStJohnsWeather({ signal: controller.signal }).then((fresh) => {
+          if (disposed || id !== generation) return;
+          weather = fresh; fetchedAt = Date.now(); publish();
+        }),
+        fetchStJohnsMarine({ signal: controller.signal }).then((fresh) => {
+          if (disposed || id !== generation) return;
+          marine = fresh; marineFetchedAt = Date.now(); marineFailed = false; publish();
+        }).catch(() => {
+          if (!disposed && id === generation) { marineFailed = true; publish(); }
+        }),
+      ]);
     } finally {
       clearTimeout(timeout);
       if (!disposed && id === generation) { loading = false; request = null; publish(); }
@@ -204,20 +259,32 @@ export function stJohnsEnvironment(onChange) {
     // Fit the list inside the panel so choosing a sky needs only one scrollbar.
     const overflow = Math.max(0, panel.scrollHeight - panel.clientHeight);
     options.style.maxHeight = `${Math.max(100, options.clientHeight - overflow)}px`;
-    const selected = optionButtons.find((button) => button.dataset.value === preview);
+    const selected = optionButtons.find((button) => button.dataset.value === preview) || optionButtons[0];
     selected.focus({ preventScroll: true }); revealOption(selected);
   }
   function togglePicker() { if (options.hidden) openPicker(); else { closePicker(); picker.focus(); } }
-  function close() { closePicker(); panel.hidden = true; toggle.setAttribute('aria-expanded', 'false'); }
+  function setStudio(open) {
+    closePicker(); overview.hidden = open; studio.hidden = !open;
+    panel.classList.toggle('tuning-weather', open); panel.scrollTop = 0;
+    tuneButton.setAttribute('aria-expanded', String(open));
+  }
+  function openStudio() { setStudio(true); backButton.focus({ preventScroll: true }); }
+  function backToSettings() { setStudio(false); tuneButton.focus({ preventScroll: true }); }
+  function resetAdjustments() {
+    // Move focus before disabling Reset so focusout does not dismiss the studio.
+    control.querySelector('#weather-daylight').focus({ preventScroll: true });
+    custom = null; customBase = null; publish();
+  }
+  function close() { setStudio(false); panel.hidden = true; toggle.setAttribute('aria-expanded', 'false'); }
   function togglePanel() {
     if (!panel.hidden) { close(); return; }
     panel.hidden = false; toggle.setAttribute('aria-expanded', 'true');
   }
-  function followCity() { preview = ''; publish(); close(); toggle.focus(); }
+  function followCity() { preview = ''; custom = null; customBase = null; publish(); close(); toggle.focus(); }
   function choosePreview(e) {
     const button = e.target.closest('.sky-option');
     if (!button) return;
-    preview = button.dataset.value; publish(); close(); toggle.focus();
+    preview = button.dataset.value; custom = null; customBase = null; publish(); close(); toggle.focus();
   }
   let typed = '', typedAt = 0;
   function pickerKey(e) {
@@ -239,7 +306,11 @@ export function stJohnsEnvironment(onChange) {
     optionButtons.forEach((button, i) => { button.tabIndex = i === index ? 0 : -1; });
     optionButtons[index].focus({ preventScroll: true }); revealOption(optionButtons[index]);
   }
-  function refreshCity() { preview = ''; closePicker(); publish(); refresh(); }
+  function refreshCity() {
+    preview = ''; custom = null; customBase = null; closePicker(); publish();
+    // Refresh becomes disabled while fetching; keep keyboard focus in the control.
+    toggle.focus({ preventScroll: true }); refresh();
+  }
   function dismissKey(e) {
     if (e.key !== 'Escape') return;
     e.preventDefault(); e.stopPropagation();
@@ -255,6 +326,9 @@ export function stJohnsEnvironment(onChange) {
   toggle.addEventListener('click', togglePanel);
   refreshButton.addEventListener('click', refreshCity);
   returnCity.addEventListener('click', followCity);
+  tuneButton.addEventListener('click', openStudio);
+  backButton.addEventListener('click', backToSettings);
+  resetButton.addEventListener('click', resetAdjustments);
   picker.addEventListener('click', togglePicker);
   options.addEventListener('click', choosePreview);
   control.addEventListener('keydown', pickerKey);
@@ -272,6 +346,9 @@ export function stJohnsEnvironment(onChange) {
       toggle.removeEventListener('click', togglePanel);
       refreshButton.removeEventListener('click', refreshCity);
       returnCity.removeEventListener('click', followCity);
+      tuneButton.removeEventListener('click', openStudio);
+      backButton.removeEventListener('click', backToSettings);
+      resetButton.removeEventListener('click', resetAdjustments);
       picker.removeEventListener('click', togglePicker);
       options.removeEventListener('click', choosePreview);
       control.removeEventListener('keydown', pickerKey);

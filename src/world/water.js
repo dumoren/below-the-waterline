@@ -42,8 +42,8 @@ export function buildWater(uniforms, { mobile }) {
       varying vec3 vN;
       void main() {
         vec3 p = position;
-        p.y += waterHeight(p.xz, uTime);
-        vec2 s = waterSlope(p.xz, uTime);
+        p.y += waterHeight(p.xz);
+        vec2 s = waterSlope(p.xz);
         vN = normalize(vec3(-s.x, 1.0, -s.y));
         vec4 w = modelMatrix * vec4(p, 1.0);
         vWorld = w.xyz;
@@ -65,7 +65,7 @@ export function buildWater(uniforms, { mobile }) {
         vec2 q = wp.xz * 0.9;
         float e = 0.08;
         float r0 = ripple(q);
-        vec3 n = normalize(vN + vec3(r0 - ripple(q + vec2(e, 0.0)), 0.0, r0 - ripple(q + vec2(0.0, e))) * (0.65 + uWind * 0.5 + uRain * 0.3));
+        vec3 n = normalize(vN + vec3(r0 - ripple(q + vec2(e, 0.0)), 0.0, r0 - ripple(q + vec2(0.0, e))) * (0.35 + uSeaEnergy * 1.2 + uWind * 0.25 + uRain * 0.3));
         vec3 V = normalize(cameraPosition - wp);
         float dist = length(cameraPosition - wp);
 
@@ -115,7 +115,7 @@ export function buildWater(uniforms, { mobile }) {
           vec3 sky = skyColor(sd) * 1.7 + directLightColor() * pow(max(dot(sd, directLightDirection()), 0.0), 12.0) * 0.6;
           vec3 tir = uwWater(normalize(vec3(-V.x, 0.2, -V.z)), -2.0) * 0.9 + vec3(0.0, 0.02, 0.025) * r0;
           vec3 col = mix(tir, sky, window);
-          col += vec3(0.5, 0.85, 1.0) * pow(r0 * 0.6, 6.0) * window * 0.8 * surfaceLight();
+          col += vec3(0.5, 0.85, 1.0) * waterTintAt(cameraPosition.y) * pow(r0 * 0.6, 6.0) * window * 0.8 * uWaterCaustics;
           col = mix(col, vec3(0.75, 0.85, 0.9) * (0.15 + uAmbient * 0.85), foam * 0.35 * window);
           col *= absorb(-cameraPosition.y * 0.6);
           col = mix(col, uwWater(-V, cameraPosition.y), uwFog(dist));

@@ -2,7 +2,7 @@
 // p < P_SURF is the approach from the air; the rest is linear in depth.
 import { profile } from './world/berg.js';
 
-export const M_PER_UNIT = 3.1;
+export { M_PER_UNIT } from './scene-scale.js';
 export const P_SURF = 0.1;
 const Y_TOP = 15;
 const Y_START = -2.5;

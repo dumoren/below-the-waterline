@@ -257,7 +257,8 @@ export function buildSeabedLife(U, { mobile, heightAt, anchorPosition, reduced =
             float band = 1.0 - smoothstep(0.035, 0.075, min(abs(vLocal.x - 0.18), abs(vLocal.x + 0.22)));
             base = mix(base, vec3(0.8, 0.82, 0.76) * vColor, band * 0.8);
           }
-          vec3 col = base * grain * form * (0.22 + max(n.y, 0.0) * 0.3 + habitat * 0.5) * vec3(0.4, 0.7, 0.8);
+          vec3 illumination = (0.22 + max(n.y, 0.0) * 0.3) * uwAmbientColor(vWorld.y) + vec3(0.4, 0.7, 0.8) * habitat * 0.5;
+          vec3 col = base * grain * form * illumination;
           col += torchLight(vWorld, n) * base * 1.7 + contactGlow(vWorld) * base;
           col += vec3(0.25, 0.65, 0.72) * pingRing(vWorld) * 0.45;
           col = mix(col, uwWater(normalize(vWorld - cameraPosition), cameraPosition.y), uwFog(distance(cameraPosition, vWorld)));

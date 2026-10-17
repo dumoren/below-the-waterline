@@ -40,9 +40,12 @@ export function buildSnow(uniforms, count) {
       void main() {
         vec3 box = vec3(46.0, 34.0, 46.0);
         vec3 p = position * box;
-        p.y -= uTime * (0.25 + position.x * 0.3);
-        p.x += sin(uTime * 0.3 + position.z * 6.28) * 0.6;
-        p.z += cos(uTime * 0.23 + position.x * 6.28) * 0.6;
+        float influence = waterWeatherInfluence(cameraPosition.y);
+        float motion = uWaterMotion * influence;
+        p.y -= uWaterTime * (0.25 + position.x * 0.3);
+        p.x += sin(uWaterTime * 0.3 + position.z * 6.28) * (0.35 + motion * 2.5);
+        p.z += cos(uWaterTime * 0.23 + position.x * 6.28) * (0.35 + motion * 1.8);
+        p.xz += uCurrentOffset * mix(0.2, 1.0, influence);
         vec3 rel = mod(p - cameraPosition + box * 0.5, box) - box * 0.5;
         vec3 wp = cameraPosition + rel;
         vec4 mv = viewMatrix * vec4(wp, 1.0);
@@ -50,12 +53,14 @@ export function buildSnow(uniforms, count) {
         float d = length(rel);
         gl_PointSize = (1.2 + position.y * 1.6) * uPixelRatio * (14.0 / max(-mv.z, 1.0));
         float below = step(wp.y, -0.5);
-        vA = below * uUnder * smoothstep(23.0, 6.0, d) * smoothstep(0.5, 2.0, d);
+        float density = 0.25 + uWaterParticles * influence * 0.65;
+        float presence = 1.0 - smoothstep(density - 0.03, density + 0.03, position.z);
+        vA = below * uUnder * presence * smoothstep(23.0, 6.0, d) * smoothstep(0.5, 2.0, d);
         // An invisible flake adds nothing to the additive blend; clip it before it rasterises.
         if (vA <= 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
         vec3 tl = torchLight(wp, -normalize(rel + vec3(0.0, 1e-4, 0.0)));
         float ring = pingRing(wp);
-        vC = vec3(0.35, 0.55, 0.6) * 0.35 * absorb(-wp.y * 0.5) + tl * 1.4 + vec3(0.4, 1.0, 1.0) * ring * 1.6;
+        vC = vec3(0.35, 0.55, 0.6) * uwAmbientColor(wp.y) * 0.5 * absorb(-wp.y * 0.5) + tl * 1.4 + vec3(0.4, 1.0, 1.0) * ring * 1.6;
       }
     `,
     fragmentShader: /* glsl */ `
@@ -115,7 +120,7 @@ export function buildShafts(uniforms, count = 16) {
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     vertexShader: /* glsl */ `
-      uniform float uTime;
+      ${COMMON_CHUNK}
       attribute vec3 aSeed;
       varying vec2 vUv;
       varying float vS;
@@ -125,8 +130,9 @@ export function buildShafts(uniforms, count = 16) {
         vec3 toCam = cameraPosition - p;
         vec3 side = normalize(vec3(-toCam.z, 0.0, toCam.x) + vec3(1e-4, 0.0, 0.0));
         // Shafts lean away from the sun and sway with the surface.
-        p.x += uv.y * aSeed.z * 0.18 + sin(uTime * 0.2 + aSeed.y * 9.0) * uv.y * 1.5;
-        p += side * uv.x * aSeed.x * (1.0 + uv.y * 0.8);
+        p.xz -= underwaterLightDirection().xz * uv.y * aSeed.z * 0.5;
+        p.x += sin(uWaterTime * 0.2 + aSeed.y * 9.0) * uv.y * (0.5 + uWaterMotion * 1.5);
+        p += side * uv.x * aSeed.x * (1.0 + uv.y * 0.8) * (0.7 + uWaterTurbidity * 0.8);
         vUv = uv;
         vS = aSeed.y;
         vY = p.y;
@@ -134,11 +140,7 @@ export function buildShafts(uniforms, count = 16) {
       }
     `,
     fragmentShader: /* glsl */ `
-      uniform float uTime;
-      uniform float uUnder;
-      uniform float uDaylight;
-      uniform float uCloud;
-      uniform float uMoonStrength;
+      ${COMMON_CHUNK}
       varying vec2 vUv;
       varying float vS;
       varying float vY;
@@ -146,9 +148,10 @@ export function buildShafts(uniforms, count = 16) {
         float across = clamp(1.0 - abs(vUv.x), 0.0, 1.0);
         across = pow(across, 1.6);
         float along = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.8) * smoothstep(0.0, 0.06, vUv.y);
-        float flick = 0.55 + 0.45 * sin(uTime * (0.5 + vS) + vS * 20.0) * sin(uTime * 0.37 + vS * 7.0);
+        float flick = 0.55 + 0.45 * sin(uWaterTime * (0.5 + vS) + vS * 20.0) * sin(uWaterTime * 0.37 + vS * 7.0);
         float camFade = smoothstep(-58.0, -8.0, cameraPosition.y);
-        vec3 col = vec3(0.35, 0.75, 0.8) * across * along * flick * 0.09 * camFade * uUnder * (uDaylight * (1.0 - uCloud * 0.8) + uMoonStrength * 0.08);
+        float extinction = exp(min(vY, 0.0) * (0.02 + uWaterTurbidity * 0.035));
+        vec3 col = vec3(0.45, 0.72, 0.85) * waterTintAt(vY) * across * along * flick * 0.15 * camFade * uUnder * uWaterShafts * extinction;
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -210,7 +213,7 @@ export function buildSeabed(uniforms, { mobile }) {
           sand *= mix(1.0, 0.72 + 0.28 * wave + 0.22 * lit, waveK);
           n = normalize(n + vec3(wd.x, 0.0, wd.y) * cos(ph) * 0.35 * waveK);
         }
-        vec3 col = sand * (0.05 + 0.08 * n.y) * absorb(-wp.y * 0.5) + vec3(0.008, 0.022, 0.03) * max(n.y, 0.0);
+        vec3 col = (sand * (0.05 + 0.08 * n.y) * absorb(-wp.y * 0.5) + vec3(0.008, 0.022, 0.03) * max(n.y, 0.0)) * uwAmbientColor(wp.y) * 2.0;
         col += sand * torchLight(wp, n) * 1.1;
         col += vec3(0.35, 0.95, 1.0) * pingRing(wp) * 0.7;
         col += contactGlow(wp) * sand * 4.0;
@@ -342,7 +345,9 @@ export function buildBubbles(uniforms, count) {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     vertexShader: /* glsl */ `
-      uniform float uTime;
+      uniform float uWaterTime;
+      uniform float uWaterMotion;
+      uniform vec2 uCurrentOffset;
       uniform float uUnder;
       uniform float uPixelRatio;
       uniform float uBubbles;
@@ -351,15 +356,18 @@ export function buildBubbles(uniforms, count) {
       void main() {
         vec3 box = vec3(14.0, 18.0, 14.0);
         vec3 p = position * box;
-        p.y += uTime * (2.0 + position.x * 3.0);
-        p.x += sin(uTime * 3.0 + position.z * 30.0) * 0.15;
+        float motion = uWaterMotion * exp(-max(-cameraPosition.y, 0.0) * 0.055);
+        p.y += uWaterTime * (2.0 + position.x * 3.0);
+        p.x += sin(uWaterTime * 3.0 + position.z * 30.0) * (0.15 + motion * 0.2);
+        p.xz += uCurrentOffset * exp(-max(-cameraPosition.y, 0.0) * 0.055);
         vec3 centre = cameraPosition + uCamFwd * 7.0;
         vec3 rel = mod(p - centre + box * 0.5, box) - box * 0.5;
         vec3 wp = centre + rel;
         vec4 mv = viewMatrix * vec4(wp, 1.0);
         gl_Position = projectionMatrix * mv;
         gl_PointSize = (2.0 + position.z * 5.0) * uPixelRatio * (10.0 / max(-mv.z, 1.0));
-        vA = uBubbles * uUnder * step(wp.y, -0.3) * smoothstep(9.0, 3.0, length(rel));
+        float churn = uWaterMotion * exp(-max(-wp.y, 0.0) * 0.35) * 0.35;
+        vA = max(uBubbles, churn) * uUnder * step(wp.y, -0.3) * smoothstep(9.0, 3.0, length(rel));
         if (vA <= 0.0) gl_Position = vec4(0.0, 0.0, 2.0, 1.0); // invisible: clip, skip the fill
       }
     `,

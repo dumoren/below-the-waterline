@@ -195,7 +195,7 @@ export function bergMaterial(uniforms) {
         if (dot(n, V) < 0.0) n = -n;
         float dist = length(cameraPosition - wp);
         float fres = pow(clamp(1.0 - dot(n, V), 0.0, 1.0), 3.0);
-        float depth = waterHeight(wp.xz, uTime) - wp.y;
+        float depth = waterHeight(wp.xz) - wp.y;
         if (uDistant > 0.5 && depth > 0.0) discard;
         vec3 col;
 
@@ -248,7 +248,8 @@ export function bergMaterial(uniforms) {
           vec3 at = absorb(depth);
           float up = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
           float facet = 0.75 + 0.4 * hash12(floor(n.xz * 19.0 + n.y * 7.0));
-          col = vec3(0.32, 0.7, 0.9) * at * (0.025 + 0.75 * pow(up, 2.2)) * facet * (0.3 + surfaceLight() * 0.7);
+          col = vec3(0.32, 0.7, 0.9) * at * (0.025 + 0.75 * pow(up, 2.2)) * facet * uwAmbientColor(wp.y);
+          col += vec3(0.2, 0.5, 0.7) * at * waterTintAt(wp.y) * max(dot(n, underwaterLightDirection()), 0.0) * uWaterDirect * 0.28;
           col *= 0.82 + 0.36 * streaks(wp, n);
           // Melt scallops: shallow dishes with bright rims, as on real submerged ice.
           float scNear = smoothstep(55.0, 12.0, dist);
@@ -259,10 +260,11 @@ export function bergMaterial(uniforms) {
             col *= mix(1.0, dish + 0.32 * rim, scNear * 0.85);
           }
           // The ice glows turquoise from within near the surface, fading with depth.
-          col += vec3(0.02, 0.2, 0.22) * exp(-depth * 0.1) * (0.15 + 0.85 * fres) * surfaceLight();
-          float c = caustic(wp.xz + wp.y * 0.35, uTime * 0.55);
-          col += vec3(0.55, 0.92, 1.0) * c * at * (0.25 + 0.75 * max(n.y, 0.0)) * 1.3 * smoothstep(45.0, 0.0, depth) * surfaceLight();
-          col += vec3(0.008, 0.028, 0.05) * (0.6 + fres);
+          col += vec3(0.02, 0.2, 0.22) * waterTintAt(wp.y) * exp(-depth * 0.1) * (0.15 + 0.85 * fres) * uWaterLight;
+          float c = caustic(wp.xz + wp.y * 0.35, uWaterTime * 0.55);
+          col += vec3(0.55, 0.92, 1.0) * waterTintAt(wp.y) * c * at * (0.25 + 0.75 * max(n.y, 0.0)) * 1.3 * smoothstep(45.0, 0.0, depth) * uWaterCaustics;
+          col += vec3(0.008, 0.028, 0.05) * (0.6 + fres) * uwAmbientColor(wp.y);
+          col += vec3(0.08, 0.18, 0.26) * uLightning * exp(-depth * 0.12) * (0.2 + up * 0.8);
           col += uwFogColor(wp.y) * fres * 0.5;
           col += contactGlow(wp);
           float sy = (wp.y - uStrataY) / 1.5;
@@ -275,8 +277,8 @@ export function bergMaterial(uniforms) {
             col = mix(col, uwWater(-V, cameraPosition.y), uwFog(dist));
           } else {
             // Seen from above through the surface: turquoise near the top, lost to the dark below.
-            col = col * vec3(0.22, 0.62, 0.66) + vec3(0.012, 0.085, 0.095) * exp(-depth * 0.3);
-            col = mix(col, vec3(0.005, 0.024, 0.036), 1.0 - exp(-depth * 0.2));
+            col = col * vec3(0.22, 0.62, 0.66) + vec3(0.012, 0.085, 0.095) * waterTintAt(wp.y) * uWaterLight * exp(-depth * 0.3);
+            col = mix(col, uwFogColor(wp.y) * 0.7, 1.0 - exp(-depth * 0.2));
           }
         }
         gl_FragColor = vec4(col, 1.0);

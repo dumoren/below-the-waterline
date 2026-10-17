@@ -60,6 +60,7 @@ function hullMaterial(uniforms, color) {
         float fres = pow(clamp(1.0 - dot(n, V), 0.0, 1.0), 3.0);
         vec3 at = absorb(-vWorld.y);
         vec3 col = vec3(0.1, 0.12, 0.14) * (0.25 + 0.75 * clamp(n.y * 0.5 + 0.5, 0.0, 1.0)) * (0.2 + at);
+        col *= uwAmbientColor(vWorld.y);
         col += torchLight(vWorld, n) * vec3(0.9, 0.95, 1.0) * 1.4;
         col += uColor * fres * 0.35;
         col += vec3(0.35, 0.95, 1.0) * pingRing(vWorld);

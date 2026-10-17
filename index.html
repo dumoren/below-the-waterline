@@ -51,19 +51,37 @@
           <span aria-hidden="true">◒</span><span id="weather-status">St. John’s sky</span><span aria-hidden="true">⌄</span>
         </button>
         <section id="weather-panel" class="weather-panel" aria-label="St. John's sky settings" hidden>
+          <div id="weather-overview">
           <h2>St. John’s, out at sea</h2>
           <p id="weather-clock" class="weather-credit"></p>
           <p id="weather-message" role="status">Live weather and sun/moon lighting for St. John’s, Newfoundland.</p>
           <button type="button" id="weather-refresh">Refresh St. John’s weather</button>
+          <div class="marine-summary" aria-label="Sea state">
+            <p id="marine-status">Sea · loading marine model…</p>
+            <p id="marine-details" title="Significant wave height and mean period. Waves travel from the reported bearing; surface current flows toward its reported bearing."></p>
+            <p id="marine-time"></p>
+            <p class="marine-estimate">Underwater clarity and colour are artistic estimates.</p>
+          </div>
           <div class="weather-preview">
             <span id="weather-preview-label" class="weather-preview-label">Try another sky</span>
             <button type="button" id="weather-preview" class="sky-picker" aria-haspopup="listbox" aria-expanded="false" aria-controls="weather-options" aria-labelledby="weather-preview-label weather-preview-value">
               <span id="weather-preview-value">Live St. John’s weather</span><span class="sky-chevron" aria-hidden="true">⌄</span>
             </button>
             <div id="weather-options" class="sky-options" role="listbox" aria-labelledby="weather-preview-label" hidden></div>
-            <button type="button" id="weather-return" hidden>Return to St. John’s weather</button>
+            <button type="button" id="weather-tune" class="weather-tune" aria-controls="weather-studio" aria-expanded="false"><span aria-hidden="true">☷</span> Tune this weather <span aria-hidden="true">↗</span></button>
           </div>
-          <p class="weather-credit">Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · St. John’s, Newfoundland.</p>
+          <p class="weather-credit">Weather and marine models by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · St. John’s, Newfoundland.</p>
+          </div>
+          <div id="weather-studio" hidden>
+            <button type="button" id="weather-studio-back" class="weather-back">← Sky settings</button>
+            <div class="weather-studio-heading"><h2>Make your own weather</h2><span class="weather-preview-badge">Preview</span></div>
+            <p id="weather-studio-source"></p>
+            <p class="weather-studio-hint">Drag a dial or slide below it. Your sky also shapes the water below.</p>
+            <div id="weather-parameters"></div>
+            <p class="weather-studio-note">Scene strength, in percent. Full visibility is 20 km or more. Your starting sky sets the sun and moon positions. Preview sea motion, underwater clarity and colour are estimated.</p>
+            <button type="button" id="weather-reset" disabled>Reset adjustments</button>
+          </div>
+          <button type="button" id="weather-return" hidden>Return to St. John’s weather</button>
         </section>
       </div>
 

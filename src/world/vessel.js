@@ -36,6 +36,7 @@ export function ironMaterial(uniforms, highlight = false) {
         vec3 V = normalize(cameraPosition - vWorld);
         vec3 rust = vec3(0.24, 0.15, 0.1);
         vec3 col = rust * (0.1 + 0.16 * clamp(n.y * 0.5 + 0.5, 0.0, 1.0)) * (0.4 + absorb(-vWorld.y));
+        col *= uwAmbientColor(vWorld.y);
         col += torchLight(vWorld, n) * rust * 3.0;
         col += vec3(0.35, 0.95, 1.0) * pingRing(vWorld) * 0.8;
         col += pow(clamp(1.0 - abs(dot(n, V)), 0.0, 1.0), 3.0) * vec3(0.08, 0.13, 0.16);

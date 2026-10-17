@@ -56,7 +56,7 @@ const LensShader = {
       vec4 v = uInvProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
       vec3 dir = normalize((uCamWorld * vec4(v.xyz / v.w, 0.0)).xyz);
       vec3 lp = uCamPos + dir * 0.6;
-      float wl = lp.y - waterHeight(lp.xz, uTime);
+      float wl = lp.y - waterHeight(lp.xz);
       float below = smoothstep(0.02, -0.02, wl);
       float e = wl / 0.025;
       float edge = exp(-e * e) * uNear;
@@ -91,7 +91,7 @@ const LensShader = {
   `,
 };
 
-export function buildPost(renderer, scene, camera, { mobile }) {
+export function buildPost(renderer, scene, camera, { mobile, waves, wavePhase }) {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), mobile ? 0.55 : 0.7, 0.6, 0.72);
@@ -103,6 +103,8 @@ export function buildPost(renderer, scene, camera, { mobile }) {
   hp.needsUpdate = true;
   composer.addPass(bloom);
   const lens = new ShaderPass(LensShader);
+  lens.uniforms.uWaves = waves;
+  lens.uniforms.uWavePhase = wavePhase;
   composer.addPass(lens);
   return { composer, bloom, lens };
 }

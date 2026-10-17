@@ -166,7 +166,7 @@ function shipMaterial(uniforms, color, { emissive = 0, hull = false, windows = f
         vec3 V = normalize(cameraPosition - wp);
         if (dot(n, V) < 0.0) n = -n;
         float dist = length(cameraPosition - wp);
-        float depth = waterHeight(wp.xz, uTime) - wp.y;
+        float depth = waterHeight(wp.xz) - wp.y;
         float near = smoothstep(45.0, 12.0, dist); // close-up detail only
         float wet = 0.0;
 
@@ -602,9 +602,10 @@ export function buildShip(uniforms) {
     /** Heave and roll with the swell; turn the radar; let the exhaust drift. */
     update(t) {
       const b = this.base;
-      const h = waterHeight(b.x, b.z, t);
-      const hx = waterHeight(b.x + 3, b.z, t) - waterHeight(b.x - 3, b.z, t);
-      const hz = waterHeight(b.x, b.z + 1.5, t) - waterHeight(b.x, b.z - 1.5, t);
+      const sample = (x, z) => waterHeight(x, z, uniforms.uWaves.value, uniforms.uWavePhase.value);
+      const h = sample(b.x, b.z);
+      const hx = sample(b.x + 3, b.z) - sample(b.x - 3, b.z);
+      const hz = sample(b.x, b.z + 1.5) - sample(b.x, b.z - 1.5);
       group.position.set(b.x, b.y + h * 0.8, b.z);
       group.rotation.set(hz * 0.18, this.heading, -hx * 0.08, 'YXZ');
       radar.rotation.y = t * 1.6;

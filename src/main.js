@@ -18,6 +18,8 @@ import { Sea } from './audio.js';
 import { stJohnsEnvironment, sceneConditions, stormGlow } from './environment.js';
 import { buildWeather } from './world/weather.js';
 import { buildLightning } from './world/lightning.js';
+import { UNDERWATER_SCALARS } from './underwater-environment.js';
+import { DEFAULT_WAVES, WAVE_PHASES, composeMarineEnvironment } from './marine-environment.js';
 
 const $ = (s) => document.querySelector(s);
 const root = document.documentElement;
@@ -66,6 +68,7 @@ function start() {
     uTime: { value: 0 },
     uSunDir: { value: new THREE.Vector3() },
     uMoonDir: { value: new THREE.Vector3() },
+    uSiriusDir: { value: new THREE.Vector3() },
     uUnder: { value: 0 },
     uTorchDir: { value: new THREE.Vector3(0, 0, -1) },
     uTorch: { value: 0 },
@@ -93,21 +96,35 @@ function start() {
     uBoatSize: { value: new THREE.Vector2(SHIP.L / 2 + 0.3, SHIP.B / 2 + 0.25) },
   };
 
-  const environmentKeys = ['daylight', 'sunStrength', 'moonStrength', 'moonFraction', 'moonAngle', 'moonWaxing', 'twilight', 'ambient', 'cloud', 'rain', 'snow', 'fog', 'wind', 'ice', 'drizzle', 'thunder'];
+  const environmentKeys = ['daylight', 'sunStrength', 'moonStrength', 'moonFraction', 'moonAngle', 'moonWaxing', 'twilight', 'ambient', 'cloud', 'rain', 'snow', 'fog', 'wind', 'ice', 'drizzle', 'thunder', ...UNDERWATER_SCALARS, 'seaEnergy'];
+  U.uWaterTint = { value: new THREE.Vector3(1, 1, 1) };
+  U.uWaves = { value: DEFAULT_WAVES.map((wave) => new THREE.Vector4(...wave)) };
+  U.uWavePhase = { value: new THREE.Vector3(...WAVE_PHASES) };
+  U.uSeaCurrent = { value: new THREE.Vector2() };
+  U.uCurrentOffset = { value: new THREE.Vector2() };
+  U.uWaterTime = reduced ? { value: 0 } : U.uTime;
   U.uLightning = { value: 0 };
   U.uStormDir = { value: new THREE.Vector3(-0.8, 0, -0.6) };
   const uniformName = (key) => `u${key[0].toUpperCase()}${key.slice(1)}`;
   environmentKeys.forEach((key) => { U[uniformName(key)] = { value: 0 }; });
   let environmentTarget = null;
-  const sunTarget = new THREE.Vector3(), moonTarget = new THREE.Vector3();
+  const sunTarget = new THREE.Vector3(), moonTarget = new THREE.Vector3(), waterTintTarget = new THREE.Vector3();
+  const waveTargets = DEFAULT_WAVES.map((wave) => new THREE.Vector4(...wave)), currentTarget = new THREE.Vector2();
   function applyEnvironment(conditions, immediate = false) {
+    if (!conditions.sea) conditions = composeMarineEnvironment(conditions);
     const first = !environmentTarget;
     environmentTarget = conditions;
     root.style.setProperty('--sky-daylight', conditions.daylight);
     sunTarget.fromArray(conditions.sunDirection); moonTarget.fromArray(conditions.moonDirection);
+    waterTintTarget.fromArray(conditions.waterTint);
+    waveTargets.forEach((wave, i) => wave.fromArray(conditions.sea.waves[i]));
+    currentTarget.fromArray(conditions.sea.current);
     if (first || immediate) {
       environmentKeys.forEach((key) => { U[uniformName(key)].value = conditions[key]; });
       U.uSunDir.value.copy(sunTarget); U.uMoonDir.value.copy(moonTarget);
+      U.uWaterTint.value.copy(waterTintTarget);
+      U.uWaves.value.forEach((wave, i) => wave.copy(waveTargets[i]));
+      U.uSeaCurrent.value.copy(currentTarget);
     }
   }
   const environment = stJohnsEnvironment(applyEnvironment);
@@ -332,7 +349,7 @@ function start() {
   $('#total').textContent = String(contacts.length);
 
   // ───────────── Post ─────────────
-  const { composer, bloom, lens } = buildPost(renderer, scene, camera, { mobile });
+  const { composer, bloom, lens } = buildPost(renderer, scene, camera, { mobile, waves: U.uWaves, wavePhase: U.uWavePhase });
 
   // ───────────── Layout ─────────────
   let W = 1;
@@ -349,6 +366,15 @@ function start() {
     bloom.setSize(Math.round((W * dpr) / 2), Math.round((H * dpr) / 2));
     camera.aspect = W / H;
     camera.updateProjectionMatrix();
+    // Frame Sirius just above the opening horizon on both desktop and portrait.
+    // This is an artistic placement; the live Sun/Moon keep their astronomical positions.
+    const opening = pose(0, { pos: new THREE.Vector3(), target: new THREE.Vector3(), offset: 0 });
+    const starCamera = new THREE.PerspectiveCamera(42, W / H, 0.1, 1400);
+    starCamera.position.copy(opening.pos);
+    starCamera.lookAt(opening.target);
+    if (W / H > 1.05) starCamera.setViewOffset(W, H, -W * 0.13, 0, W, H);
+    starCamera.updateMatrixWorld();
+    U.uSiriusDir.value.set(0.04, 0.84, 1).unproject(starCamera).sub(opening.pos).normalize();
     lens.uniforms.uRes.value.set(W * dpr, H * dpr);
   }
   window.addEventListener('resize', resize);
@@ -902,22 +928,32 @@ function start() {
   const upv = new THREE.Vector3();
   const lift = new THREE.Vector3();
   let hoverAcc = 0;
+  let stormTime = 0;
   let thunderCycle = -1;
   let hovered = null;
   const perf = { n: 0, time: 0, done: false };
 
-  function tick(dt, draw = true) {
+  function tick(dt, draw = true, stormDt = dt) {
     t += dt;
+    // Lightning must stay brief even when expensive frames slow the simulation clock.
+    stormTime += stormDt;
     U.uTime.value = t;
     const envBlend = reduced ? 1 : 1 - Math.exp(-dt * 0.8);
     environmentKeys.forEach((key) => { const uniform = U[uniformName(key)]; uniform.value += (environmentTarget[key] - uniform.value) * envBlend; });
     U.uSunDir.value.lerp(sunTarget, envBlend).normalize();
     U.uMoonDir.value.lerp(moonTarget, envBlend).normalize();
-    U.uLightning.value = stormGlow(t, U.uThunder.value, reduced);
-    lightning.userData.update(t, camera.aspect);
-    const stormCycle = Math.floor(t / 19);
+    U.uWaterTint.value.lerp(waterTintTarget, envBlend);
+    U.uSeaCurrent.value.lerp(currentTarget, envBlend);
+    U.uWaves.value.forEach((wave, i) => {
+      wave.lerp(waveTargets[i], envBlend);
+      if (!reduced) U.uWavePhase.value.setComponent(i, (U.uWavePhase.value.getComponent(i) + wave.w * dt) % (Math.PI * 2));
+    });
+    if (!reduced) U.uCurrentOffset.value.addScaledVector(U.uSeaCurrent.value, dt);
+    U.uLightning.value = stormGlow(stormTime, U.uThunder.value, reduced);
+    lightning.userData.update(stormTime, camera.aspect);
+    const stormCycle = Math.floor(stormTime / 19);
     // The rumble arrives several seconds after the distant bolt, using the sound toggle.
-    if (t % 19 >= 8 && stormCycle !== thunderCycle) {
+    if (stormTime % 19 >= 8 && stormCycle !== thunderCycle) {
       thunderCycle = stormCycle;
       if (U.uThunder.value > 0.2 && U.uUnder.value < 0.5) sea.thunder(U.uThunder.value);
     }
@@ -1041,7 +1077,7 @@ function start() {
     camera.getWorldDirection(fwd);
 
     // Above or below?
-    const wh = waterHeight(camera.position.x, camera.position.z, t);
+    const wh = waterHeight(camera.position.x, camera.position.z, U.uWaves.value, U.uWavePhase.value);
     under = camera.position.y < wh;
     weatherParticles.visible = !under && Math.max(U.uRain.value, U.uSnow.value, U.uIce.value) > 0.01;
     underK += ((under ? 1 : 0) - underK) * (1 - Math.exp(-dt * 6));
@@ -1258,9 +1294,9 @@ function start() {
   let running = true;
   function frame(now) {
     if (!running) return;
-    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+    const elapsed = Math.max(0, (now - last) / 1000);
     last = now;
-    tick(dt);
+    tick(Math.min(0.05, elapsed), true, elapsed);
     requestAnimationFrame(frame);
   }
   document.addEventListener('visibilitychange', () => {

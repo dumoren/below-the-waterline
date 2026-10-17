@@ -99,6 +99,7 @@ export function buildFish(uniforms, count, { toolkit = true, kind = 'capelin', s
         float camFlash = pow(abs(dot(side, normalize(cameraPosition - wp))), 6.0);
         vec3 at = absorb(-wp.y);
         vec3 base = vec3(0.4, 0.58, 0.64) * at * (0.35 + flash * 1.4) + vec3(0.7, 0.9, 0.95) * camFlash * 0.6 * at + vec3(0.01, 0.03, 0.04);
+        base *= uwAmbientColor(wp.y);
         base += torchLight(wp, side) * (0.8 + camFlash * 2.0);
         base += vec3(0.4, 1.0, 1.0) * pingRing(wp);
         float shimmer = pow(max(0.0, sin(t * 2.6 - aSeed.x * TAU * 2.0)), 10.0);
