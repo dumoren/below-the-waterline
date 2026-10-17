@@ -500,6 +500,7 @@ function start() {
   // ───────────── Card ─────────────
   const card = $('#card');
   let cardFor = null;
+  let cardOnLeft = null;
   let cardReturnFocus = null;
   let contactReturnFocus = null;
   let handlingRoute = false;
@@ -508,6 +509,7 @@ function start() {
   }
   function openCard(c, trigger = document.activeElement) {
     if (!cardFor) cardReturnFocus = trigger instanceof HTMLElement && trigger !== document.body && !card.contains(trigger) ? trigger : c.mark || $('#btn-log');
+    cardOnLeft = null;
     cardFor = c;
     const body = card.querySelector('.card-body');
     const k = document.createElement('p');
@@ -519,7 +521,7 @@ function start() {
     kr.textContent = c.school ? 'every depth' : c.vessel ? '0 m · on board' : `−${c.depth} m`;
     k.append(kl, kr);
     const nodes = [k];
-    for (const sel of ['h4', '.role', '.when', '.stats', '.line', '.skills', '.tags', '.links']) {
+    for (const sel of ['h4', '.role', '.when', '.stats', '.line', '.details', '.skills', '.tags', '.links']) {
       const n = c.el.querySelector(sel);
       if (!n) continue;
       let copy = n.cloneNode(true);
@@ -561,6 +563,7 @@ function start() {
       syncRoute(`#project/${c.id}`);
     } else if (location.hash.startsWith('#project/') || location.hash === '#log') syncRoute('#surface');
     body.replaceChildren(...nodes);
+    body.scrollTop = 0;
     card.dataset.section = c.zone.id;
     card.style.setProperty('--c', c.color);
     card.hidden = false;
@@ -614,6 +617,36 @@ function start() {
   let lastPing = -99;
   let started = false;
   const pointer = { x: 0, y: 0, has: false, down: null };
+  const zoomMedia = matchMedia('(max-width: 760px), (pointer: coarse)');
+  const zoomControls = $('#scene-zoom');
+  const zoomOut = $('#zoom-out'), zoomIn = $('#zoom-in'), zoomLevel = $('#zoom-level');
+  const WIDE_ZOOM = 0.55, MIN_ZOOM = 0.5, MAX_ZOOM = 1.25;
+  let zoomEnabled = zoomMedia.matches;
+  let zoomTarget = zoomEnabled ? WIDE_ZOOM : 1;
+  let viewZoom = zoomTarget;
+  const minViewZoom = () => Math.max(MIN_ZOOM, Math.tan(camera.fov * Math.PI / 360)); // at most 90° vertically
+  function changeZoom(value) {
+    zoomTarget = THREE.MathUtils.clamp(value, minViewZoom(), MAX_ZOOM);
+  }
+  function syncZoomAvailability() {
+    zoomEnabled = zoomMedia.matches;
+    zoomControls.hidden = !zoomEnabled;
+    root.classList.toggle('has-scene-zoom', zoomEnabled);
+    zoomTarget = zoomEnabled ? WIDE_ZOOM : 1;
+    if (reduced) viewZoom = zoomTarget;
+  }
+  zoomMedia.addEventListener('change', syncZoomAvailability);
+  syncZoomAvailability();
+  zoomOut.addEventListener('click', () => changeZoom(Math.max(zoomTarget, minViewZoom()) - 0.15));
+  zoomIn.addEventListener('click', () => changeZoom(Math.max(zoomTarget, minViewZoom()) + 0.15));
+  $('#zoom-reset').addEventListener('click', () => changeZoom(WIDE_ZOOM));
+  const touchPoints = new Map();
+  let pinch = null;
+  let pinchUsed = false;
+  const pinchDistance = () => {
+    const [a, b] = [...touchPoints.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
   const ping = { r: 0, s: 0, active: false, o: new THREE.Vector3() };
   const PING_RANGE = 30;
   const sea = new Sea();
@@ -732,7 +765,8 @@ function start() {
     (e) => {
       if (root.classList.contains('log-open')) return;
       if (e.target.closest?.('#weather-control')) return;
-      if (e.target.closest?.('#card') && card.scrollHeight > card.clientHeight) return;
+      if (e.target.closest?.('#card')) return;
+      if (e.target.closest?.('#scene-zoom')) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
       if (ascent.on) return;
@@ -747,9 +781,26 @@ function start() {
 
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
+    if (e.pointerType === 'touch') {
+      touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (zoomEnabled && touchPoints.size >= 2) {
+        pinch = { distance: Math.max(1, pinchDistance()), zoom: Math.max(zoomTarget, minViewZoom()) };
+        pinchUsed = true;
+        pointer.down = null;
+        pointer.has = false;
+        return;
+      }
+    }
     pointer.down = { x: e.clientX, y: e.clientY, py: e.clientY, moved: 0 };
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'touch' && touchPoints.has(e.pointerId)) {
+      touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinchUsed) {
+        if (pinch && touchPoints.size >= 2) changeZoom(pinch.zoom * pinchDistance() / pinch.distance);
+        return;
+      }
+    }
     pointer.x = (e.clientX / W) * 2 - 1;
     pointer.y = -(e.clientY / H) * 2 + 1;
     pointer.has = true;
@@ -769,6 +820,12 @@ function start() {
     }
   });
   canvas.addEventListener('pointerup', (e) => {
+    touchPoints.delete(e.pointerId);
+    if (pinchUsed) {
+      if (!touchPoints.size) { pinch = null; pinchUsed = false; }
+      pointer.down = null;
+      return;
+    }
     const d = pointer.down;
     pointer.down = null;
     if (!d || d.moved > 10) return;
@@ -784,10 +841,17 @@ function start() {
       moved();
     }
   });
+  canvas.addEventListener('pointercancel', (e) => {
+    touchPoints.delete(e.pointerId);
+    pointer.down = null;
+    if (!touchPoints.size) { pinch = null; pinchUsed = false; }
+  });
   canvas.addEventListener('pointerleave', () => (pointer.has = false));
 
   window.addEventListener('keydown', (e) => {
-    if (e.target.closest?.('input, textarea, #weather-control')) return;
+    if (e.target.closest?.('input, textarea, #weather-control, #scene-zoom')) return;
+    // Reading controls keep their native Enter/Space and scrolling keys.
+    if (e.target.closest?.('#card') && !['Escape', 'm', 'M', 'l', 'L'].includes(e.key)) return;
     if (root.classList.contains('log-open')) {
       if (e.key === 'Escape') setLog(false);
       return;
@@ -951,6 +1015,12 @@ function start() {
     if (!reduced) U.uCurrentOffset.value.addScaledVector(U.uSeaCurrent.value, dt);
     U.uLightning.value = stormGlow(stormTime, U.uThunder.value, reduced);
     lightning.userData.update(stormTime, camera.aspect);
+    // Use the rendered sky, including cloud/storm dimming, rather than the visitor's clock.
+    // A small dead band keeps the frame stable around dawn and changing cloud cover.
+    const skyBrightness = U.uDaylight.value * (1 - U.uCloud.value * 0.65) * (1 - U.uThunder.value * 0.45) + U.uTwilight.value * 0.1;
+    const cardTheme = card.dataset.weather;
+    const nextCardTheme = cardTheme === 'light' ? (skyBrightness < 0.36 ? 'dark' : 'light') : (skyBrightness > 0.46 ? 'light' : 'dark');
+    if (cardTheme !== nextCardTheme) card.dataset.weather = nextCardTheme;
     const stormCycle = Math.floor(stormTime / 19);
     // The rumble arrives several seconds after the distant bolt, using the sound toggle.
     if (stormTime % 19 >= 8 && stormCycle !== thunderCycle) {
@@ -1070,6 +1140,13 @@ function start() {
     if (!reduced) camera.position.y += Math.sin(t * 0.6) * 0.08 * underK;
     camera.lookAt(camTarget);
     camera.fov = fieldOfView;
+    viewZoom += (zoomTarget - viewZoom) * (reduced ? 1 : 1 - Math.exp(-dt * 10));
+    // Use the lens zoom so travel's base FOV and its interpolation remain independent.
+    camera.zoom = zoomEnabled ? Math.max(minViewZoom(), viewZoom) : viewZoom;
+    zoomOut.disabled = zoomTarget <= minViewZoom() + 0.005;
+    zoomIn.disabled = zoomTarget >= MAX_ZOOM - 0.005;
+    const zoomText = `${camera.zoom.toFixed(2).replace(/0$/, '')}×`;
+    if (zoomLevel.textContent !== zoomText) zoomLevel.textContent = zoomText;
     if (viewOffset > 0.001 && W / H > 1.05) camera.setViewOffset(W, H, -W * 0.13 * viewOffset, 0, W, H);
     else camera.clearViewOffset();
     camera.updateProjectionMatrix();
@@ -1218,7 +1295,9 @@ function start() {
       const y = (-v.y * 0.5 + 0.5) * H;
       const cw = card.offsetWidth;
       const ch = card.offsetHeight;
-      let cx = x > W * 0.5 ? x - cw - 56 : x + 56;
+      // Keep one side while reading; tiny camera shifts must not flip a wide card.
+      if (cardOnLeft == null) cardOnLeft = x > W * 0.5;
+      let cx = cardOnLeft ? x - cw - 56 : x + 56;
       // Aboard on a wide screen, the boat fills the middle: keep the card out on the open sea.
       if (cardFor.vessel && W / H > 1.05) cx = Math.min(cx, Math.max(16, W * 0.05));
       cx = Math.max(16, Math.min(W - cw - 96, cx));

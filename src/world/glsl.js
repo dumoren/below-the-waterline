@@ -95,7 +95,14 @@ vec3 starLight(vec3 d, float clouds) {
   vec2 centre = vec2(hash12(cell + 17.1), hash12(cell + 39.7)) * 0.7 + 0.15;
   vec2 delta = fract(sp) - centre;
   float radius = mix(0.045, 0.115, hash12(cell + 81.3));
-  float width = max(radius, length(fwidth(sp)) * 0.6);
+  // COMMON_CHUNK also runs in vertex shaders, where screen derivatives are unavailable.
+  float pixelWidth = 0.0;
+  float angularWidth = 0.0;
+  #ifdef FILTERED_STARS
+    pixelWidth = length(fwidth(sp));
+    angularWidth = length(fwidth(d));
+  #endif
+  float width = max(radius, pixelWidth * 0.6);
   float point = exp(-dot(delta, delta) / (width * width)) * radius * radius / (width * width);
   float brightness = mix(0.35, 2.0, pow(hash12(cell + 5.4), 5.0));
   vec3 temperature = mix(vec3(0.62, 0.76, 1.0), vec3(1.0, 0.86, 0.69), hash12(cell + 9.2));
@@ -104,7 +111,7 @@ vec3 starLight(vec3 d, float clouds) {
   // Sirius is deliberately framed in the opening view, with a compact blue-white
   // core and a soft halo. It stays fixed in the sky when the visitor looks around.
   float separation = length(d - uSiriusDir);
-  float coreWidth = max(0.00085, length(fwidth(d)) * 0.65);
+  float coreWidth = max(0.00085, angularWidth * 0.65);
   // Preserve its tiny angular energy when choppy water spreads the reflection.
   float core = exp(-pow(separation / coreWidth, 2.0)) * pow(0.00085 / coreWidth, 2.0);
   float halo = exp(-pow(separation / 0.0035, 2.0));

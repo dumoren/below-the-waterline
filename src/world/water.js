@@ -51,6 +51,7 @@ export function buildWater(uniforms, { mobile }) {
       }
     `,
     fragmentShader: /* glsl */ `
+      #define FILTERED_STARS
       ${COMMON_CHUNK}
       uniform sampler2D uWaterline;
       uniform vec4 uBoat;      // x, z, heading, on
@@ -144,6 +145,7 @@ export function buildSky(uniforms) {
       }
     `,
     fragmentShader: /* glsl */ `
+      #define FILTERED_STARS
       ${COMMON_CHUNK}
       varying vec3 vDir;
       void main() {

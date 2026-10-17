@@ -5,6 +5,10 @@ and the camera spirals down around the berg to the seabed, about 200 metres belo
 the ice as glowing crystals, and a sonar ping finds it.
 
 - **Scroll or swipe** to dive. The camera settles gently onto each contact.
+- **Mobile zoom:** phones and touch devices start with a wider scene. Use the bottom-right minus/plus
+  controls or pinch the scene with two fingers; the middle zoom value resets the wide view. One-finger
+  swipes still dive. Zoom changes the lens without moving the camera off its route, applies during
+  travel and underwater, and stops at a 90-degree vertical field of view to avoid extreme stretching.
 - **Click or tap** open water to send a **sonar ping**. The wavefront sweeps over the ice and the seabed, and
   reveals nearby contacts. It also fires on its own the first time you stop beside an undiscovered one.
 - **Click a crystal** to swim up to it and open its card: a name, a role, one line and a few tags.
@@ -107,10 +111,18 @@ Everything lives in `index.html` under `#log`. Each `<section class="zone">` is 
 (`data-from`/`data-to` set its depth band), and each `<li>` in it is one item. `data-depth` (metres)
 places the item, `data-color` sets its glow, and `data-angle` nudges it around the berg relative to the camera.
 Add a job or project by adding an `<li>` to the right section.
+Use `.details` with a `.highlights` list for supporting résumé facts; a native `<details class="more">`
+can hold longer material. The same content appears in the dive log and the point card. Long cards scroll
+inside the reading pane, keeping Close available, and each newly opened card starts at the top.
+Cards use the selected frosted-glass frame in dark conditions and the deep-water frame in bright conditions.
+Rendered daylight, cloud cover, storm strength and twilight choose the material, with a small hysteresis band
+to prevent flickering between themes. The deep-water frame includes a desktop depth rail; portrait screens
+keep the depth in the header to preserve reading space. Both use the same live HTML content.
 
 ## How it's made
 
-The whole scene is procedural. There are no model or texture files.
+The 3D scene is procedural, with no model or texture files. The card interface uses two generated transparent
+frame textures in `public/images/cards/`; all card text and controls remain native HTML.
 
 Weather composition is defined in `src/weather-parameters.js`: `WEATHER_PARAMETERS` describes the shared 0–1
 controls, `weatherParameters()` extracts them from a scene, and `composeWeatherConditions()` applies them while
