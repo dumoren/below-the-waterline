@@ -6,15 +6,23 @@ import { M_PER_UNIT } from '../scene-scale.js';
 /** A radial grid, dense near the berg, sparse out to the horizon. */
 function radialGrid(rings, segs, maxR) {
   const pos = [];
+  const spacing = [];
   const index = [];
   const outerRings = 24;
+  const radii = [];
   for (let i = 0; i <= rings + outerRings; i++) {
-    const r = i <= rings ? maxR * Math.pow(i / rings, 2.3) : maxR * Math.pow(12000 / maxR, (i - rings) / outerRings);
+    radii.push(i <= rings ? maxR * Math.pow(i / rings, 2.3) : maxR * Math.pow(12000 / maxR, (i - rings) / outerRings));
+  }
+  radii.forEach((r, i) => {
+    // The coarser of the ring gap and the arc between spokes: the shortest wave this vertex can carry.
+    const gap = (radii[Math.min(i + 1, radii.length - 1)] - radii[Math.max(i - 1, 0)]) / (i === 0 || i === radii.length - 1 ? 1 : 2);
+    const s = Math.max(gap, (Math.PI * 2 * r) / segs);
     for (let j = 0; j < segs; j++) {
       const a = (j / segs) * Math.PI * 2;
       pos.push(Math.cos(a) * r, 0, Math.sin(a) * r);
+      spacing.push(s);
     }
-  }
+  });
   for (let i = 0; i < rings + outerRings; i++) {
     for (let j = 0; j < segs; j++) {
       const a = i * segs + j;
@@ -26,6 +34,7 @@ function radialGrid(rings, segs, maxR) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aSpacing', new THREE.Float32BufferAttribute(spacing, 1));
   g.setIndex(index);
   return g;
 }
@@ -40,8 +49,10 @@ export function buildWater(uniforms, { mobile }) {
     vertexShader: /* glsl */ `
       ${WATER_CHUNK}
       uniform float uTime;
+      attribute float aSpacing;
       varying vec3 vWorld;
       varying vec3 vN;
+      varying vec2 vCurve;
       void main() {
         vec3 p = position;
         float radius = length(p.xz);
@@ -50,8 +61,19 @@ export function buildWater(uniforms, { mobile }) {
         float detail = 1.0 - smoothstep(250.0, 460.0, radius);
         float bend = max(0.0, radius - 460.0);
         float earthRadius = ${(6371000 / M_PER_UNIT).toFixed(3)};
-        p.y += waterHeight(p.xz) * detail - bend * bend / (2.0 * earthRadius);
-        vec2 s = waterSlope(p.xz) * detail - p.xz / max(0.001, radius) * bend / earthRadius;
+        // Displace only by waves this ring spacing can carry. A short marine wave
+        // sampled every few units interpolates into swirling moiré across the sea.
+        float h = 0.0;
+        vec2 s = vec2(0.0);
+        for (int i = 0; i < 3; i++) {
+          float k = waveResolved(i, aSpacing, 0.125, 0.25) * detail * uWaves[i].z;
+          float phase = dot(p.xz, uWaves[i].xy) - uWavePhase[i];
+          h += sin(phase) * k;
+          s += uWaves[i].xy * cos(phase) * k;
+        }
+        vCurve = -p.xz / max(0.001, radius) * bend / earthRadius;
+        p.y += h - bend * bend / (2.0 * earthRadius);
+        s += vCurve;
         vN = normalize(vec3(-s.x, 1.0, -s.y));
         vec4 w = modelMatrix * vec4(p, 1.0);
         vWorld = w.xyz;
@@ -61,11 +83,25 @@ export function buildWater(uniforms, { mobile }) {
     fragmentShader: /* glsl */ `
       #define FILTERED_STARS
       ${COMMON_CHUNK}
+      ${WATER_CHUNK}
       uniform sampler2D uWaterline;
       uniform vec4 uBoat;      // x, z, heading, on
       uniform vec2 uBoatSize;  // half length, half beam
       varying vec3 vWorld;
       varying vec3 vN;
+      varying vec2 vCurve;
+
+      // Swell normals per pixel, each wave faded once a pixel covers too much of it,
+      // so short waves stay crisp nearby and average out instead of aliasing far away.
+      vec3 swellNormal(vec2 p) {
+        float footprint = max(length(dFdx(p)), length(dFdy(p)));
+        vec2 s = vCurve;
+        for (int i = 0; i < 3; i++) {
+          float k = waveResolved(i, footprint, 0.17, 0.34) * uWaves[i].z;
+          s += uWaves[i].xy * cos(dot(p, uWaves[i].xy) - uWavePhase[i]) * k;
+        }
+        return normalize(vec3(-s.x, 1.0, -s.y));
+      }
 
       float ripple(vec2 q) { return vnoise(q + uTime * 0.35) + vnoise(q * 2.3 - uTime * 0.5) * 0.5 + vnoise(q * 5.1 + uTime * 0.8) * 0.2; }
 
@@ -76,7 +112,7 @@ export function buildWater(uniforms, { mobile }) {
         float r0 = ripple(q);
         vec3 V = normalize(cameraPosition - wp);
         float dist = length(cameraPosition - wp);
-        vec3 n = normalize(vN + vec3(r0 - ripple(q + vec2(e, 0.0)), 0.0, r0 - ripple(q + vec2(0.0, e))) * (0.35 + uSeaEnergy * 1.2 + uWind * 0.25 + uRain * 0.3) * (1.0 - smoothstep(150.0, 1400.0, dist)));
+        vec3 n = normalize(swellNormal(wp.xz) + vec3(r0 - ripple(q + vec2(e, 0.0)), 0.0, r0 - ripple(q + vec2(0.0, e))) * (0.35 + uSeaEnergy * 1.2 + uWind * 0.25 + uRain * 0.3) * (1.0 - smoothstep(150.0, 1400.0, dist)));
 
         // Foam hugging the berg's waterline.
         float ang = atan(wp.z, wp.x);

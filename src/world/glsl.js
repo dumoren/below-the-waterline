@@ -15,6 +15,12 @@ vec2 waterSlope(vec2 p) {
   for (int i = 0; i < 3; i++) d += uWaves[i].xy * cos(dot(p, uWaves[i].xy) - uWavePhase[i]) * uWaves[i].z;
   return d;
 }
+// 1 while a wave spans many samples of the given spacing, 0 once it would alias.
+// lo and hi are fractions of the wavelength (Nyquist is 0.5).
+float waveResolved(int i, float spacing, float lo, float hi) {
+  float wavelength = 6.2831853 / max(1e-4, length(uWaves[i].xy));
+  return 1.0 - smoothstep(lo * wavelength, hi * wavelength, spacing);
+}
 `;
 
 export const COMMON_CHUNK = /* glsl */ `
