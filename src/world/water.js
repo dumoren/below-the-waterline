@@ -1,19 +1,21 @@
 // The ocean surface (seen from both sides) and the blue-hour sky.
 import * as THREE from 'three';
 import { COMMON_CHUNK, WATER_CHUNK } from './glsl.js';
+import { M_PER_UNIT } from '../scene-scale.js';
 
 /** A radial grid, dense near the berg, sparse out to the horizon. */
 function radialGrid(rings, segs, maxR) {
   const pos = [];
   const index = [];
-  for (let i = 0; i <= rings; i++) {
-    const r = maxR * Math.pow(i / rings, 2.3);
+  const outerRings = 24;
+  for (let i = 0; i <= rings + outerRings; i++) {
+    const r = i <= rings ? maxR * Math.pow(i / rings, 2.3) : maxR * Math.pow(12000 / maxR, (i - rings) / outerRings);
     for (let j = 0; j < segs; j++) {
       const a = (j / segs) * Math.PI * 2;
       pos.push(Math.cos(a) * r, 0, Math.sin(a) * r);
     }
   }
-  for (let i = 0; i < rings; i++) {
+  for (let i = 0; i < rings + outerRings; i++) {
     for (let j = 0; j < segs; j++) {
       const a = i * segs + j;
       const b = i * segs + ((j + 1) % segs);
@@ -42,8 +44,14 @@ export function buildWater(uniforms, { mobile }) {
       varying vec3 vN;
       void main() {
         vec3 p = position;
-        p.y += waterHeight(p.xz);
-        vec2 s = waterSlope(p.xz);
+        float radius = length(p.xz);
+        // End displaced swells before the coarse horizon rings. Sampling short
+        // waves on those wide rings produces false concentric bands at the horizon.
+        float detail = 1.0 - smoothstep(250.0, 460.0, radius);
+        float bend = max(0.0, radius - 460.0);
+        float earthRadius = ${(6371000 / M_PER_UNIT).toFixed(3)};
+        p.y += waterHeight(p.xz) * detail - bend * bend / (2.0 * earthRadius);
+        vec2 s = waterSlope(p.xz) * detail - p.xz / max(0.001, radius) * bend / earthRadius;
         vN = normalize(vec3(-s.x, 1.0, -s.y));
         vec4 w = modelMatrix * vec4(p, 1.0);
         vWorld = w.xyz;
@@ -66,9 +74,9 @@ export function buildWater(uniforms, { mobile }) {
         vec2 q = wp.xz * 0.9;
         float e = 0.08;
         float r0 = ripple(q);
-        vec3 n = normalize(vN + vec3(r0 - ripple(q + vec2(e, 0.0)), 0.0, r0 - ripple(q + vec2(0.0, e))) * (0.35 + uSeaEnergy * 1.2 + uWind * 0.25 + uRain * 0.3));
         vec3 V = normalize(cameraPosition - wp);
         float dist = length(cameraPosition - wp);
+        vec3 n = normalize(vN + vec3(r0 - ripple(q + vec2(e, 0.0)), 0.0, r0 - ripple(q + vec2(0.0, e))) * (0.35 + uSeaEnergy * 1.2 + uWind * 0.25 + uRain * 0.3) * (1.0 - smoothstep(150.0, 1400.0, dist)));
 
         // Foam hugging the berg's waterline.
         float ang = atan(wp.z, wp.x);
@@ -95,12 +103,12 @@ export function buildWater(uniforms, { mobile }) {
           vec3 R = reflect(-V, n);
           R.y = abs(R.y);
           vec3 refl = skyColor(R);
-          float sunS = max(dot(R, directLightDirection()), 0.0);
-          vec3 spec = directLightColor() * (pow(sunS, 900.0) * 10.0 + pow(sunS, 220.0) * 0.3);
+          // Tight glints retain the sun path without blooming over the whole horizon.
+          vec3 spec = directIrradiance(R, 1800.0) * 1.8 + directIrradiance(R, 400.0) * 0.08;
           vec3 body = (vec3(0.006, 0.03, 0.042) + vec3(0.012, 0.06, 0.07) * smoothstep(-0.5, 1.0, n.y)) * (0.18 + uAmbient * 0.82);
           vec3 col = mix(body, refl, fres) + spec;
-          col = mix(col, vec3(0.8, 0.86, 0.9) * (0.12 + uAmbient * 0.43 + 0.45 * max(dot(n, directLightDirection()), 0.0) * length(directLightColor())), foam * 0.85);
-          float haze = smoothstep(90.0, 440.0, dist);
+          col = mix(col, vec3(0.8, 0.86, 0.9) * (0.12 + uAmbient * 0.43 + 0.45 * length(directIrradiance(n, 1.0))), foam * 0.85);
+          float haze = smoothstep(1600.0, 12000.0, dist);
           float atmosphere = 1.0 - (1.0 - haze) * (1.0 - airFog(dist));
           // Match the actual background ray, rather than sampling a fixed sky elevation.
           // At the outer grid edge this becomes exactly the sky behind it, hiding the seam.
@@ -113,7 +121,7 @@ export function buildWater(uniforms, { mobile }) {
           float up = clamp(-V.y, 0.0, 1.0);
           float window = smoothstep(0.6, 0.72, up);
           vec3 sd = normalize(vec3(-V.x * 0.7 + n.x * 0.6, 0.35 + up, -V.z * 0.7 + n.z * 0.6));
-          vec3 sky = skyColor(sd) * 1.7 + directLightColor() * pow(max(dot(sd, directLightDirection()), 0.0), 12.0) * 0.6;
+          vec3 sky = skyColor(sd) * 1.7 + directIrradiance(sd, 12.0) * 0.6;
           vec3 tir = uwWater(normalize(vec3(-V.x, 0.2, -V.z)), -2.0) * 0.9 + vec3(0.0, 0.02, 0.025) * r0;
           vec3 col = mix(tir, sky, window);
           col += vec3(0.5, 0.85, 1.0) * waterTintAt(cameraPosition.y) * pow(r0 * 0.6, 6.0) * window * 0.8 * uWaterCaustics;

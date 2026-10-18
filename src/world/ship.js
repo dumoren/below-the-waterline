@@ -204,14 +204,13 @@ function shipMaterial(uniforms, color, { emissive = 0, hull = false, windows = f
           if (uEmissive > 0.0) {
             col = uColor * uEmissive;
           } else if (depth < 0.0) {
-            float ndl = max(dot(n, directLightDirection()), 0.0);
             float hemi = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
             vec3 sky = mix(vec3(0.045, 0.065, 0.11), vec3(0.25, 0.32, 0.44), hemi);
-            col = base * (sky * uAmbient + directLightColor() * pow(ndl, 1.2) * 1.05);
+            col = base * (sky * uAmbient + directIrradiance(n, 1.2) * 1.05);
             vec3 R = reflect(-V, n);
             float fres = pow(clamp(1.0 - dot(n, V), 0.0, 1.0), 4.0);
             col += skyColor(R) * (0.05 + fres * 0.35) * ${spec.toFixed(2)};
-            col += directLightColor() * pow(max(dot(R, directLightDirection()), 0.0), 48.0) * 0.7 * ${spec.toFixed(2)};
+            col += directIrradiance(R, 48.0) * 0.7 * ${spec.toFixed(2)};
             col += skyColor(R) * fres * 0.6 * wet; // wet steel mirrors the sky
           } else {
             col = base * 0.035 * absorb(depth) + torchLight(wp, n) * base * 0.9;

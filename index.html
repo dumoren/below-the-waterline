@@ -7,7 +7,7 @@
     <meta name="description" content="Derek Umoren, computer engineer in St. John's, Newfoundland. Dive beneath an iceberg to find his work." />
     <meta name="theme-color" content="#02070d" />
     <meta property="og:title" content="Derek Umoren · Below the Waterline" />
-    <meta property="og:description" content="Most of what I build is below the surface." />
+    <meta property="og:description" content="Computer engineer in St. John’s, Newfoundland. I build web apps and backend systems." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="./social-preview.jpg" />
     <meta property="og:image:width" content="1200" />
@@ -34,6 +34,32 @@
 
       <header class="hud">
         <h1 class="brand"><a href="#surface" data-surface>Derek Umoren</a></h1>
+        <div class="weather-control" id="weather-control">
+          <button type="button" id="btn-weather" aria-expanded="false" aria-controls="weather-panel">
+            <span aria-hidden="true">◒</span><span id="weather-status"><span class="weather-context">St. John’s · </span><span id="weather-condition">Sky</span></span><span aria-hidden="true">⌄</span>
+          </button>
+          <section id="weather-panel" class="weather-panel" aria-label="St. John's sky settings" hidden>
+            <h2>St. John’s, out at sea</h2>
+            <p id="weather-clock" class="weather-credit"></p>
+            <p id="weather-message" role="status">Live weather and sun/moon lighting for St. John’s, Newfoundland.</p>
+            <button type="button" id="weather-refresh">Refresh St. John’s weather</button>
+            <div class="marine-summary" aria-label="Sea state">
+              <p id="marine-status">Sea · loading marine model…</p>
+              <p id="marine-details" title="Significant wave height and mean period. Waves travel from the reported bearing; surface current flows toward its reported bearing."></p>
+              <p id="marine-time"></p>
+              <p class="marine-estimate">Underwater clarity and colour are artistic estimates.</p>
+            </div>
+            <div class="weather-preview">
+              <span id="weather-preview-label" class="weather-preview-label">Try another sky</span>
+              <button type="button" id="weather-preview" class="sky-picker" aria-haspopup="listbox" aria-expanded="false" aria-controls="weather-options" aria-labelledby="weather-preview-label weather-preview-value">
+                <span id="weather-preview-value">Live St. John’s weather</span><span class="sky-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div id="weather-options" class="sky-options" role="listbox" aria-labelledby="weather-preview-label" hidden></div>
+            </div>
+            <p class="weather-credit">Weather and marine models by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · St. John’s, Newfoundland.</p>
+            <button type="button" id="weather-return" hidden>Return to St. John’s weather</button>
+          </section>
+        </div>
         <nav class="tools" aria-label="Dive controls">
           <p class="found" aria-live="polite" title="Contacts found on the dive"><span class="sonar-ico" aria-hidden="true"></span><b id="found">0</b>/<span id="total">7</span><span class="found-l" aria-hidden="true">found</span><span class="sr-only"> contacts found</span></p>
           <button type="button" id="btn-sound" class="ico" aria-pressed="false" aria-label="Sound">
@@ -46,50 +72,11 @@
         </nav>
       </header>
 
-      <div class="weather-control" id="weather-control">
-        <button type="button" id="btn-weather" aria-expanded="false" aria-controls="weather-panel">
-          <span aria-hidden="true">◒</span><span id="weather-status">St. John’s sky</span><span aria-hidden="true">⌄</span>
-        </button>
-        <section id="weather-panel" class="weather-panel" aria-label="St. John's sky settings" hidden>
-          <div id="weather-overview">
-          <h2>St. John’s, out at sea</h2>
-          <p id="weather-clock" class="weather-credit"></p>
-          <p id="weather-message" role="status">Live weather and sun/moon lighting for St. John’s, Newfoundland.</p>
-          <button type="button" id="weather-refresh">Refresh St. John’s weather</button>
-          <div class="marine-summary" aria-label="Sea state">
-            <p id="marine-status">Sea · loading marine model…</p>
-            <p id="marine-details" title="Significant wave height and mean period. Waves travel from the reported bearing; surface current flows toward its reported bearing."></p>
-            <p id="marine-time"></p>
-            <p class="marine-estimate">Underwater clarity and colour are artistic estimates.</p>
-          </div>
-          <div class="weather-preview">
-            <span id="weather-preview-label" class="weather-preview-label">Try another sky</span>
-            <button type="button" id="weather-preview" class="sky-picker" aria-haspopup="listbox" aria-expanded="false" aria-controls="weather-options" aria-labelledby="weather-preview-label weather-preview-value">
-              <span id="weather-preview-value">Live St. John’s weather</span><span class="sky-chevron" aria-hidden="true">⌄</span>
-            </button>
-            <div id="weather-options" class="sky-options" role="listbox" aria-labelledby="weather-preview-label" hidden></div>
-            <button type="button" id="weather-tune" class="weather-tune" aria-controls="weather-studio" aria-expanded="false"><span aria-hidden="true">☷</span> Tune this weather <span aria-hidden="true">↗</span></button>
-          </div>
-          <p class="weather-credit">Weather and marine models by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · St. John’s, Newfoundland.</p>
-          </div>
-          <div id="weather-studio" hidden>
-            <button type="button" id="weather-studio-back" class="weather-back">← Sky settings</button>
-            <div class="weather-studio-heading"><h2>Make your own weather</h2><span class="weather-preview-badge">Preview</span></div>
-            <p id="weather-studio-source"></p>
-            <p class="weather-studio-hint">Drag a dial or slide below it. Your sky also shapes the water below.</p>
-            <div id="weather-parameters"></div>
-            <p class="weather-studio-note">Scene strength, in percent. Full visibility is 20 km or more. Your starting sky sets the sun and moon positions. Preview sea motion, underwater clarity and colour are estimated.</p>
-            <button type="button" id="weather-reset" disabled>Reset adjustments</button>
-          </div>
-          <button type="button" id="weather-return" hidden>Return to St. John’s weather</button>
-        </section>
-      </div>
-
       <main id="stage-main" aria-label="Dive">
         <section class="hero" id="hero">
           <p class="hero-k">St. John's, Newfoundland · 47.56° N</p>
           <h2 class="hero-name">Derek<br />Umoren</h2>
-          <p class="hero-line">Computer engineer.<br />Most of what I build is below the surface.</p>
+          <p class="hero-line">Computer engineer.<br />I build web apps and backend systems.</p>
         </section>
 
         <div id="card" role="dialog" aria-modal="false" aria-labelledby="card-title" tabindex="-1" hidden inert>
@@ -141,7 +128,7 @@
           <button type="button" class="log-x" id="btn-close-log">Back to the dive</button>
           <p class="log-k">Dive log</p>
           <h2>Derek Umoren</h2>
-          <p class="log-sub">Computer engineer in St. John's, Newfoundland. Most of what I build is below the surface.</p>
+          <p class="log-sub">Computer engineer in St. John's, Newfoundland. I build web apps and backend systems.</p>
         </header>
 
         <!-- Each zone is a résumé section: a depth band with its own form and colour in the dive. -->
@@ -260,7 +247,7 @@
             <li data-id="contact" data-kind="vessel" data-color="#ff5a45">
               <h4>Come aboard</h4>
               <p class="role">Open to software engineering roles</p>
-              <p class="line">That's the dive. Most of what I build is below the surface; let's talk above it.</p>
+              <p class="line">Email me or find me on LinkedIn and GitHub.</p>
               <ul class="links">
                 <li><a href="mailto:derekumoren@gmail.com">derekumoren@gmail.com</a></li>
                 <li><a href="https://www.linkedin.com/in/derekumoren/" target="_blank" rel="noopener">LinkedIn</a></li>

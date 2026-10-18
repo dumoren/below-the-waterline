@@ -25,6 +25,11 @@ uniform vec3 uSiriusDir;
 uniform float uDaylight;
 uniform float uSunStrength;
 uniform float uMoonStrength;
+uniform float uMoonDiskStrength;
+uniform float uSunElevation;
+uniform float uSunAngularRadius;
+uniform float uMoonAngularRadius;
+uniform float uHorizonDip;
 uniform float uMoonFraction;
 uniform float uMoonAngle;
 uniform float uMoonWaxing;
@@ -68,10 +73,13 @@ float vnoise(vec2 p) {
   return mix(mix(hash12(i), hash12(i + vec2(1, 0)), u.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), u.x), u.y);
 }
 
-vec3 directLightDirection() { return uSunStrength > 0.01 ? uSunDir : uMoonDir; }
-vec3 directLightColor() {
-  vec3 sunlight = mix(vec3(1.0, 0.57, 0.34), vec3(1.0, 0.94, 0.82), smoothstep(0.05, 0.55, uSunDir.y));
-  return sunlight * uSunStrength + vec3(0.38, 0.55, 0.85) * uMoonStrength * 0.38 + vec3(0.3, 0.4, 0.6) * uLightning;
+vec3 sunLightColor() { return mix(vec3(1.0, 0.57, 0.34), vec3(1.0, 0.94, 0.82), smoothstep(0.05, 0.55, uSunElevation)) * uSunStrength; }
+vec3 moonLightColor() { return vec3(0.38, 0.55, 0.85) * uMoonStrength * 0.38; }
+vec3 directLightColor() { return sunLightColor() + moonLightColor() + vec3(0.3, 0.4, 0.6) * uLightning; }
+vec3 directLightDirection() { return normalize(uSunDir * uSunStrength + uMoonDir * uMoonStrength * 0.38 + vec3(0.0, 0.0001, 0.0)); }
+vec3 directIrradiance(vec3 n, float power) { return sunLightColor() * pow(max(dot(n, uSunDir), 0.0), power) + moonLightColor() * pow(max(dot(n, uMoonDir), 0.0), power); }
+float directShade(vec3 n) {
+  return (smoothstep(0.3, -0.5, dot(n, uSunDir)) * uSunStrength + smoothstep(0.3, -0.5, dot(n, uMoonDir)) * uMoonStrength * 0.38) / max(0.001, uSunStrength + uMoonStrength * 0.38);
 }
 float surfaceLight() { return 0.12 + uDaylight * (1.0 - uCloud * 0.65) + uMoonStrength * 0.15; }
 // A clear foreground preserves facets and painted steel; extinction builds with distance.
@@ -121,40 +129,60 @@ vec3 starLight(vec3 d, float clouds) {
 
 vec3 skyColor(vec3 d) {
   float h = d.y;
-  vec3 zenith = mix(vec3(0.0015, 0.003, 0.012), vec3(0.075, 0.20, 0.39), uDaylight);
-  vec3 mid = mix(vec3(0.006, 0.013, 0.032), vec3(0.30, 0.47, 0.65), uDaylight);
-  vec3 horizon = mix(vec3(0.018, 0.031, 0.055), vec3(0.62, 0.69, 0.73), uDaylight);
-  vec3 col = mix(horizon, mid, smoothstep(0.0, 0.2, h));
+  float seaH = h - uHorizonDip;
+  float angularPixel = 0.00015;
+  #ifdef FILTERED_STARS
+    angularPixel = max(0.00015, length(fwidth(d)) * 0.65);
+  #endif
+  float aboveSea = smoothstep(-angularPixel, angularPixel, seaH);
+  // The opening view looks just above the horizon. Keep that clear air blue;
+  // grey scattering belongs to cloud cover and poor visibility.
+  float overcast = smoothstep(0.35, 1.0, uCloud);
+  vec3 zenith = mix(vec3(0.0015, 0.003, 0.012), mix(vec3(0.025, 0.11, 0.30), vec3(0.18, 0.23, 0.30), overcast), uDaylight);
+  vec3 mid = mix(vec3(0.006, 0.013, 0.032), mix(vec3(0.065, 0.24, 0.56), vec3(0.30, 0.35, 0.42), overcast), uDaylight);
+  vec3 horizon = mix(vec3(0.018, 0.031, 0.055), mix(vec3(0.26, 0.50, 0.80), vec3(0.52, 0.57, 0.62), overcast), uDaylight);
+  vec3 col = mix(horizon, mid, smoothstep(0.0, 0.16, h));
   col = mix(col, zenith, smoothstep(0.18, 0.75, h));
+  float blueHour = smoothstep(-0.22, -0.06, uSunElevation) * (1.0 - smoothstep(-0.04, 0.06, uSunElevation));
+  col += vec3(0.004, 0.014, 0.04) * blueHour;
   col *= 1.0 - uThunder * 0.48;
   float s = max(dot(d, uSunDir), 0.0);
   col += vec3(0.65, 0.20, 0.10) * uTwilight * pow(max(dot(normalize(d.xz), normalize(uSunDir.xz + vec2(0.0001))), 0.0), 3.0) * exp(-abs(h) * 7.0) * (1.0 - uCloud * 0.8);
-  col += directLightColor() * uSunStrength * (pow(s, 24.0) * 0.16 + pow(s, 260.0) * 0.7 + pow(s, 6000.0) * 2.8);
+  // Physical angular size; clouds and fog soften and veil the disk. The cloud
+  // layer below can pass in front of it, and the horizon clips a rising/setting sun.
+  float sunRadius = uSunAngularRadius;
+  float sunEdge = angularPixel + uFog * 0.001 + uCloud * uCloud * 0.0003;
+  float sunDisk = 1.0 - smoothstep(sunRadius - sunEdge, sunRadius + sunEdge, length(d - uSunDir));
+  // Rough reflections can cover more sky than the solar disk in one pixel.
+  // Preserve its coverage instead of turning that wide filter into bright stripes.
+  sunDisk *= min(1.0, pow(sunRadius / max(sunRadius, angularPixel), 2.0));
+  sunDisk *= aboveSea * (1.0 - smoothstep(0.7, 0.98, uCloud)) * (1.0 - smoothstep(0.18, 0.85, uFog));
+  col += sunLightColor() * (pow(s, 64.0) * 0.05 + pow(s, 700.0) * 0.22 + sunDisk * 4.0);
   // Let the lunar halo continue below the horizon without a hard horizontal cutoff.
-  float moonDot = max(dot(d, uMoonDir), 0.0);
-  col += vec3(0.12, 0.20, 0.36) * pow(moonDot, 90.0) * uMoonStrength;
-  if (h > 0.0) {
-    if (moonDot > 0.9995 && uMoonStrength > 0.001) {
+  float moonSeparation = length(d - uMoonDir);
+  col += vec3(0.55, 0.67, 0.85) * exp(-pow(moonSeparation / (uMoonAngularRadius * (4.0 + uFog * 4.0)), 2.0)) * uMoonStrength * 0.007;
+  if (moonSeparation < uMoonAngularRadius + angularPixel * 2.0 && uMoonDiskStrength > 0.001) {
       vec3 side = normalize(cross(vec3(0.0001, 1.0, 0.0), uMoonDir));
       vec3 up = cross(uMoonDir, side);
-      vec2 uv = vec2(dot(d, side), dot(d, up)) / 0.014;
-      uv = mat2(cos(uMoonAngle), -sin(uMoonAngle), sin(uMoonAngle), cos(uMoonAngle)) * uv;
+      vec2 uv = vec2(dot(d, side), dot(d, up)) / uMoonAngularRadius;
       float r2 = dot(uv, uv);
       if (r2 < 1.0) {
         float z = sqrt(1.0 - r2), f = 2.0 * uMoonFraction - 1.0;
-        vec3 lit = vec3(sqrt(max(0.0, 1.0 - f * f)) * uMoonWaxing, 0.0, f);
-        float phase = smoothstep(-0.04, 0.08, dot(vec3(uv, z), lit));
-        float crater = 0.8 + vnoise(uv * 11.0) * 0.2;
-        col += vec3(0.68, 0.77, 0.88) * phase * crater * smoothstep(1.0, 0.85, r2) * (1.0 - uDaylight) * (1.0 - uCloud * 0.95) * 2.0;
+        vec3 lit = vec3(vec2(sin(uMoonAngle), cos(uMoonAngle)) * sqrt(max(0.0, 1.0 - f * f)), f);
+        float phase = smoothstep(-0.035, 0.035, dot(vec3(uv, z), lit));
+        float crater = 0.68 + vnoise(uv * 11.0) * 0.32;
+        float limb = 1.0 - smoothstep(max(0.0, 1.0 - angularPixel / uMoonAngularRadius), 1.0, sqrt(r2));
+        col += vec3(0.30, 0.34, 0.40) * phase * crater * limb * uMoonDiskStrength * aboveSea;
       }
-    }
+  }
+  if (seaH > 0.0) {
     vec2 uv = d.xz / (h + 0.16) * 1.4 + vec2(uTime * (0.002 + uWind * 0.012), uTime * 0.001);
     float noise = vnoise(uv) * 0.6 + vnoise(uv * 2.1 + 3.0) * 0.28 + vnoise(uv * 4.3 - 1.0) * 0.12;
     float clouds = smoothstep(0.82 - uCloud * 0.7, 1.0 - uCloud * 0.55, noise);
     clouds = mix(clouds, 0.92, smoothstep(0.85, 1.0, uCloud) * 0.7);
     // Fade the whole cloud layer, including overcast, into the horizon atmosphere.
-    clouds *= smoothstep(0.0, 0.1, h);
-    vec3 cloudColor = mix(vec3(0.018, 0.028, 0.045), vec3(0.34, 0.39, 0.45), uDaylight);
+    clouds *= smoothstep(0.0, 0.1, seaH);
+    vec3 cloudColor = mix(vec3(0.018, 0.028, 0.045), mix(vec3(0.80, 0.85, 0.92), vec3(0.34, 0.39, 0.45), overcast), uDaylight);
     cloudColor *= 1.0 - uThunder * 0.55;
     cloudColor += vec3(0.32, 0.4, 0.55) * uLightning * (0.5 + noise);
     cloudColor += vec3(0.35, 0.13, 0.06) * uTwilight * pow(s, 3.0) * (1.0 - uCloud * 0.7);
@@ -165,8 +193,8 @@ vec3 skyColor(vec3 d) {
   col = mix(col, vec3(0.014, 0.023, 0.038) * (0.3 + uAmbient), smoothstep(0.0, -0.12, h));
   // The sky and distant sea share this broad, continuous haze on both sides of zero.
   // Wetter conditions widen it; clear skies retain more definition and the celestial glow.
-  float width = 0.035 + uCloud * 0.025 + uFog * 0.045 + uRain * 0.015;
-  float mist = exp(-pow(abs(h) / width, 1.6)) * (0.45 + uCloud * 0.15 + uFog * 0.2);
+  float width = 0.012 + uCloud * 0.038 + uFog * 0.065 + uRain * 0.025;
+  float mist = exp(-pow(abs(seaH) / width, 1.6)) * (0.12 + uCloud * 0.35 + uFog * 0.45);
   float facingSun = pow(max(dot(normalize(d.xz + vec2(0.0001)), normalize(uSunDir.xz + vec2(0.0001))), 0.0), 3.0);
   vec3 mistColor = horizon * (1.0 - uThunder * 0.48);
   mistColor += vec3(0.3, 0.12, 0.07) * uTwilight * facingSun * (1.0 - uCloud * 0.8);

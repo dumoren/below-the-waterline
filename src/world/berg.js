@@ -201,7 +201,6 @@ export function bergMaterial(uniforms) {
 
         if (depth < 0.0) {
           // Above water: a low warm sun, cold sky fill, glacial blue in the shadows.
-          float ndl = max(dot(n, directLightDirection()), 0.0);
           float facet = 0.82 + 0.26 * hash12(floor(n.xz * 23.0 + n.y * 11.0));
           vec3 sky = mix(vec3(0.1, 0.17, 0.28), vec3(0.42, 0.52, 0.66), pow(clamp(n.y * 0.5 + 0.5, 0.0, 1.0), 1.4));
           // Snow settles on the upward faces; steep walls show older, bluer compressed ice.
@@ -221,8 +220,8 @@ export function bergMaterial(uniforms) {
             crack = (1.0 - smoothstep(0.0, 0.035, abs(c - 0.5))) * (1.0 - snow * 0.8) * near;
           }
           vec3 albedo = mix(iceWall, vec3(0.95, 0.97, 1.0), snow);
-          col = albedo * (sky * 0.8 * facet * uAmbient + directLightColor() * pow(ndl, 1.3));
-          float shade = smoothstep(0.3, -0.5, dot(n, directLightDirection()));
+          col = albedo * (sky * 0.8 * facet * uAmbient + directIrradiance(n, 1.3));
+          float shade = directShade(n);
           col = mix(col, vec3(0.04, 0.24, 0.42) * facet * 0.85 * uAmbient, shade * 0.58);
           // Light leaking through the shaded ice: a cold cyan glow from inside.
           col += vec3(0.03, 0.2, 0.26) * shade * (1.0 - snow) * (0.6 + 0.4 * st) * uAmbient;
@@ -230,9 +229,9 @@ export function bergMaterial(uniforms) {
           col = mix(col, col * vec3(0.5, 0.78, 1.0), bands * 0.75);
           col = mix(col, col * vec3(0.3, 0.6, 0.9), crack * 0.7);
           vec3 R = reflect(-V, n);
-          col += directLightColor() * pow(max(dot(R, directLightDirection()), 0.0), 36.0) * 0.22;
+          col += directIrradiance(R, 36.0) * 0.22;
           col += skyColor(R) * fres * 0.35;
-          col += directLightColor() * pow(fres, 2.0) * pow(max(dot(-V, directLightDirection()), 0.0), 6.0) * 0.45;
+          col += directIrradiance(-V, 6.0) * pow(fres, 2.0) * 0.45;
           // Snow reflects light diffusely: keep the broad faces below the bloom threshold.
           col = col / (vec3(1.0) + col * 0.8);
           col *= 1.0 - 0.35 * exp(depth * 2.2);

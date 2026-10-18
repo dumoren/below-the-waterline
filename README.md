@@ -29,9 +29,9 @@ the ice as glowing crystals, and a sonar ping finds it.
   [SunCalc](https://github.com/mourner/suncalc) supplies sun/moon positions and lunar illumination for
   the same city. The displayed clock always uses `America/St_Johns`, including daylight saving time.
   Visitor location, browser geolocation permissions and location preferences are not used.
-  Forecasts refresh every 15 minutes while visible; astronomy updates each minute. A recent forecast
+  Forecasts refresh every 15 minutes while visible; astronomy updates once per second. A recent forecast
   is retained through brief outages (up to 30 minutes); offline lighting still uses St. John’s astronomy.
-  **Refresh St. John’s weather** performs a manual update.
+  The refresh button in the sky settings performs a manual update.
 - **Try another sky** in the sky settings offers 18 illustrative previews: clear sky, passing clouds,
   overcast, sunrise, golden hour, blue hour, moonlight, sea mist, dense fog, drizzle, heavy rain, thunderstorm,
   hailstorm, snow flurries, sleet, blizzard, sunset showers and moonlit flurries. Previews use example dates and conditions, are labelled
@@ -46,20 +46,12 @@ the ice as glowing crystals, and a sonar ping finds it.
   the opening sky, framed for both desktop and portrait screens. Its placement and the surrounding field
   are artistic rather than a dated star chart; the live Sun and Moon retain their astronomical positions.
   Stars remain steady in reduced-motion mode and share the sky's water reflections.
-- **Tune this weather** opens a weather studio from the sky settings. Its 12 draggable dials and keyboard-accessible
-  sliders control daylight, sunlight, moonlight, twilight, cloud cover, visibility, rain, snow, ice/hail,
-  drizzle character, wind and storm strength. Start from live weather or any of the existing presets. Adjustments
-  preview immediately, keep the starting sun/moon positions and are labelled **Custom weather**. Percentages indicate
-  visual strength, not probability; 100% visibility represents 20 km or more, and 0% represents dense fog.
-  **Reset adjustments** restores the selected preset or latest live conditions. **Return to St. John’s weather** exits
-  manual mode. Edits stay in memory while browsing and are not saved across reloads. Live refreshes continue in the
-  background without replacing a custom scene. Reduced motion still disables lightning.
 - **One sky, one dive:** surface weather also shapes the water below. Sun and moon intensity, cloud cover,
   atmospheric visibility and storm strength determine transmitted light, beams and caustics. Twilight gives
   the upper water a warmer tint; snow and ice shift it towards blue. Wind, rain and hail increase suspended
   particles, near-surface haze, drift and bubbles. Fog softens the incoming light without turning calm water
   muddy. The disturbance fades with depth, while the torch, sonar, contact lights and anchor clearing remain
-  readable. Presets, live observations and manual adjustments all use the same continuous mapping.
+  readable. Presets and live observations use the same continuous mapping.
 - **Offshore sea state:** live mode also loads [Open-Meteo's marine model](https://open-meteo.com/en/docs/marine-weather-api)
   using a preferred sea grid cell near St. John’s. Significant wave height, period and incoming direction, plus
   separate swell/wind-wave components, drive the surface. Surface current speed and outgoing direction drive
@@ -67,7 +59,7 @@ the ice as glowing crystals, and a sonar ping finds it.
   for the selected offshore cell coordinates. This is a regional model, with limited coastal resolution.
   Weather and marine requests succeed or fail independently. Marine data refreshes every 15 minutes while visible;
   a recent response is kept for up to 30 minutes through outages, and model times older than 90 minutes are rejected.
-  Cached data and weather-based fallbacks are labelled. Presets and custom weather use illustrative seas, and returning
+  Cached data and weather-based fallbacks are labelled. Presets use illustrative seas, and returning
   to live mode restores the marine model. Underwater clarity, colour and the depth profile of the current remain
   artistic estimates. They are not measurements supplied by this feed.
 - The **dive log** (≡) lists everything as plain text. It's also the page visitors get without WebGL.
@@ -125,16 +117,27 @@ The 3D scene is procedural, with no model or texture files. The card interface u
 frame textures in `public/images/cards/`; all card text and controls remain native HTML.
 
 Weather composition is defined in `src/weather-parameters.js`: `WEATHER_PARAMETERS` describes the shared 0–1
-controls, `weatherParameters()` extracts them from a scene, and `composeWeatherConditions()` applies them while
-retaining astronomy. `src/environment.js` maps API observations and the 18 presets into that model;
-`src/weather-controls.js` builds the studio controls. Visibility feeds the existing atmospheric fog rendering.
+parameters, `weatherParameters()` extracts them from a scene, and `composeWeatherConditions()` applies them while
+retaining astronomy. `src/environment.js` maps API observations and the 18 presets into that model.
+Visibility feeds the existing atmospheric fog rendering. The menu offers live weather and presets.
 Direct sunlight uses solar irradiance when available, with the real solar horizon still respected in live mode.
+Static presets stage the sun in the opening view on desktop and mobile; these are illustrative compositions.
+Clouds and mist soften or obscure its disk. Live weather uses St. John's actual sun and moon positions.
+
+Live astronomy updates once per second; weather and marine data refresh independently.
+The sky menu offers live weather and the existing presets, with its tab on the left of the scene.
+`src/astronomy.js` provides the shared SunCalc ephemeris, Newfoundland time-zone conversion, observer-relative
+lunar phase/tilt and angular size, and sunrise/set events. The reference test compares positions, phase and
+events against USNO data. Atmospheric refraction and the rendered sky remain approximations.
+Preset/live transitions use quaternion arcs so opposite directions never pass through a zero vector.
+Sunlight and moonlight shade the sea, ice and ship independently, and the curved distant ocean meets
+the celestial horizon.
 
 `src/underwater-environment.js` maps those normalized controls to `waterLight`, `waterDirect`, `waterTurbidity`,
 `waterShafts`, `waterCaustics`, `waterMotion`, `waterParticles` and an RGB `waterTint`. Edit its weights to tune
 the relationship between surface and underwater art direction. The shared shaders in `src/world/glsl.js`
 apply depth falloff, colour filtering and distance haze; the ice, fish, habitat and particle shaders use the
-same values. Changes interpolate with the sky, while dial edits preview immediately. New particle, bubble,
+same values. Changes interpolate with the sky. New particle, bubble,
 shaft and caustic motion uses a separate clock that stays still when reduced motion is requested.
 
 `src/marine-environment.js` decodes the marine response and builds three directional wave components. The total

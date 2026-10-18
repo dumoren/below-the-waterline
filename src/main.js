@@ -15,7 +15,7 @@ import { waterHeight } from './world/glsl.js';
 import { pose, pForCamY, theta, setEndAngle, P_SURF, M_PER_UNIT } from './path.js';
 import { buildPost } from './post.js';
 import { Sea } from './audio.js';
-import { stJohnsEnvironment, sceneConditions, stormGlow } from './environment.js';
+import { stJohnsEnvironment, stormGlow } from './environment.js';
 import { buildWeather } from './world/weather.js';
 import { buildLightning } from './world/lightning.js';
 import { UNDERWATER_SCALARS } from './underwater-environment.js';
@@ -61,7 +61,7 @@ function start() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1400);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 16000);
 
   // ───────────── Shared uniforms ─────────────
   const U = {
@@ -96,7 +96,8 @@ function start() {
     uBoatSize: { value: new THREE.Vector2(SHIP.L / 2 + 0.3, SHIP.B / 2 + 0.25) },
   };
 
-  const environmentKeys = ['daylight', 'sunStrength', 'moonStrength', 'moonFraction', 'moonAngle', 'moonWaxing', 'twilight', 'ambient', 'cloud', 'rain', 'snow', 'fog', 'wind', 'ice', 'drizzle', 'thunder', ...UNDERWATER_SCALARS, 'seaEnergy'];
+  const environmentKeys = ['daylight', 'sunStrength', 'moonStrength', 'moonDiskStrength', 'moonFraction', 'moonAngle', 'moonWaxing', 'sunElevation', 'sunAngularRadius', 'moonAngularRadius', 'twilight', 'ambient', 'cloud', 'rain', 'snow', 'fog', 'wind', 'ice', 'drizzle', 'thunder', ...UNDERWATER_SCALARS, 'seaEnergy'];
+  U.uHorizonDip = { value: 0 };
   U.uWaterTint = { value: new THREE.Vector3(1, 1, 1) };
   U.uWaves = { value: DEFAULT_WAVES.map((wave) => new THREE.Vector4(...wave)) };
   U.uWavePhase = { value: new THREE.Vector3(...WAVE_PHASES) };
@@ -109,6 +110,14 @@ function start() {
   environmentKeys.forEach((key) => { U[uniformName(key)] = { value: 0 }; });
   let environmentTarget = null;
   const sunTarget = new THREE.Vector3(), moonTarget = new THREE.Vector3(), waterTintTarget = new THREE.Vector3();
+  const skyRotation = new THREE.Quaternion(), skyStep = new THREE.Quaternion();
+  function moveSkyDirection(value, target, blend) {
+    // Quaternion arcs remain well-defined even when a preset puts a body opposite
+    // its live direction. Linear vector blending can collapse through zero.
+    skyRotation.setFromUnitVectors(value, target);
+    skyStep.identity().slerp(skyRotation, blend);
+    value.applyQuaternion(skyStep).normalize();
+  }
   const waveTargets = DEFAULT_WAVES.map((wave) => new THREE.Vector4(...wave)), currentTarget = new THREE.Vector2();
   function applyEnvironment(conditions, immediate = false) {
     if (!conditions.sea) conditions = composeMarineEnvironment(conditions);
@@ -998,14 +1007,15 @@ function start() {
   const perf = { n: 0, time: 0, done: false };
 
   function tick(dt, draw = true, stormDt = dt) {
+    environment.step(stormDt);
     t += dt;
     // Lightning must stay brief even when expensive frames slow the simulation clock.
     stormTime += stormDt;
     U.uTime.value = t;
-    const envBlend = reduced ? 1 : 1 - Math.exp(-dt * 0.8);
+    const envBlend = reduced ? 1 : 1 - Math.exp(-Math.min(2, stormDt) * 1.2);
     environmentKeys.forEach((key) => { const uniform = U[uniformName(key)]; uniform.value += (environmentTarget[key] - uniform.value) * envBlend; });
-    U.uSunDir.value.lerp(sunTarget, envBlend).normalize();
-    U.uMoonDir.value.lerp(moonTarget, envBlend).normalize();
+    moveSkyDirection(U.uSunDir.value, sunTarget, envBlend);
+    moveSkyDirection(U.uMoonDir.value, moonTarget, envBlend);
     U.uWaterTint.value.lerp(waterTintTarget, envBlend);
     U.uSeaCurrent.value.lerp(currentTarget, envBlend);
     U.uWaves.value.forEach((wave, i) => {
@@ -1152,6 +1162,7 @@ function start() {
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
     camera.getWorldDirection(fwd);
+    U.uHorizonDip.value = -Math.sqrt(2 * Math.max(0, camera.position.y) * M_PER_UNIT / 6371000);
 
     // Above or below?
     const wh = waterHeight(camera.position.x, camera.position.z, U.uWaves.value, U.uWavePhase.value);
@@ -1422,12 +1433,7 @@ function start() {
       anchorPickVolume,
       seabedLife,
       U,
-      previewEnvironment: (date, weather) => {
-        const conditions = sceneConditions(new Date(date), weather);
-        applyEnvironment(conditions, true);
-        $('#weather-status').textContent = `Preview · ${conditions.period.toLowerCase()}`;
-        return conditions;
-      },
+      previewEnvironment: (date, weather) => environment.previewAt(date, weather),
       routes,
       motion: { ascent, transit, returning },
       setP(v) {

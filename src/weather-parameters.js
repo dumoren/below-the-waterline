@@ -1,6 +1,6 @@
 import { underwaterConditions } from './underwater-environment.js';
 
-// One normalized vocabulary for live observations, presets and the weather studio.
+// One normalized vocabulary for live observations and presets.
 // These are visual strengths, not probabilities. Visibility spans 0–20 km.
 export const CLEAR_VISIBILITY_METRES = 20_000;
 export const WEATHER_PARAMETERS = Object.freeze([
@@ -35,13 +35,16 @@ export function weatherParameters(conditions) {
   });
 }
 
-// Keep the starting sun/moon positions and lunar phase. Every dial is independent:
+// Keep the starting sun/moon positions and lunar phase. Every parameter is independent:
 // changing cloud cover does not silently overwrite a manually chosen sun value.
 export function composeWeatherConditions(base, values) {
   const p = normalizeWeatherParameters(values, weatherParameters(base));
+  const moonAltitude = base.moonAltitude ?? Math.asin(base.moonDirection?.[1] || 0) * 180 / Math.PI;
+  const moonHorizon = Math.min(1, Math.max(0, (moonAltitude + 0.6) / 0.8));
   const conditions = {
     ...base,
     daylight: p.daylight, sunStrength: p.sun, moonStrength: p.moon, twilight: p.twilight,
+    moonDiskStrength: moonHorizon * moonHorizon * (3 - 2 * moonHorizon) * (1 - p.cloud * 0.95) * (0.1 + p.visibility * 0.9) * (1 - p.thunder * 0.8) * (0.2 + (1 - p.daylight) * 0.8),
     cloud: p.cloud, fog: 1 - p.visibility,
     rain: p.rain, snow: p.snow, ice: p.ice, drizzle: p.drizzle, wind: p.wind, thunder: p.thunder,
     ambient: (0.16 + p.daylight * 0.84) * (1 - p.cloud * 0.3),
