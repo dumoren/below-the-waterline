@@ -89,9 +89,10 @@ float directShade(vec3 n) {
 }
 float surfaceLight() { return 0.12 + uDaylight * (1.0 - uCloud * 0.65) + uMoonStrength * 0.15; }
 // A clear foreground preserves facets and painted steel; extinction builds with distance.
+// Heavy falling snow thickens the air on its own, so a blizzard reads apart from sleet.
 float airFog(float dist) {
-  float opticalDepth = max(0.0, dist - 12.0) * (0.0005 + uFog * uFog * 0.012);
-  return (1.0 - exp(-opticalDepth * opticalDepth)) * uFog;
+  float opticalDepth = max(0.0, dist - 12.0) * (0.0005 + uFog * uFog * 0.012 + uSnow * uSnow * 0.006);
+  return (1.0 - exp(-opticalDepth * opticalDepth)) * max(uFog, uSnow * 0.75);
 }
 
 vec3 starLight(vec3 d, float clouds) {

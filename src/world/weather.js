@@ -8,6 +8,11 @@ export function buildWeather(U, { mobile, reduced }) {
     positions.push((rnd() - 0.5) * 44, rnd() * 32, (rnd() - 0.5) * 44);
     kinds.push(rnd(), rnd(), rnd());
   }
+  // Extra flakes that only appear as snow thickens: flurries stay sparse, a blizzard fills the air.
+  for (let i = 0; i < (mobile ? 900 : 2400); i++) {
+    positions.push((rnd() - 0.5) * 44, rnd() * 32, (rnd() - 0.5) * 44);
+    kinds.push(0.5 + rnd() * 0.35, 0.3 + rnd() * 0.7, rnd());
+  }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('aWeather', new THREE.Float32BufferAttribute(kinds, 3));
@@ -22,6 +27,8 @@ export function buildWeather(U, { mobile, reduced }) {
       varying float vKind; varying float vY; varying float vFade;
       void main() {
         vKind = aWeather.x < 0.5 ? 0.0 : aWeather.x < 0.85 ? 1.0 : 2.0;
+        // Snow without rain borrows the rain drops too, so heavy snow actually fills the air.
+        if (vKind < 0.5 && uRain < 0.01) vKind = 1.0;
         float snow = step(0.5, vKind) * (1.0 - step(1.5, vKind));
         float ice = step(1.5, vKind);
         float intensity = vKind < 0.5 ? uRain : vKind < 1.5 ? uSnow : uIce;
@@ -33,15 +40,18 @@ export function buildWeather(U, { mobile, reduced }) {
         speed = mix(speed, 13.0, ice);
         p.y = mod(p.y - uWeatherTime * speed + 32.0, 32.0) - 10.0;
         p.x += sin(p.y * 0.3 + position.z + uWeatherTime * 0.4) * snow * (0.6 + uWind * 1.4);
-        p += cameraPosition;
+        // Centre the volume ahead of the camera, where the view looks, not around it.
+        vec3 ahead = -vec3(viewMatrix[0][2], 0.0, viewMatrix[2][2]);
+        p += cameraPosition + ahead / max(1e-3, length(ahead)) * 14.0;
         vY = p.y;
         vec4 view = viewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * view;
-        float baseSize = mix(mix(20.0, 9.0, uDrizzle), 4.0 + uWind * 2.0, snow);
+        float baseSize = mix(mix(20.0, 9.0, uDrizzle), (4.0 + uWind * 2.0) * (1.0 + uSnow * 0.7), snow);
         baseSize = mix(baseSize, 3.2, ice);
         float size = baseSize * (0.75 + aWeather.z * 0.5) * uPixelRatio * 9.0 / max(3.0, -view.z);
-        gl_PointSize = clamp(size, 1.0, mix(24.0, 8.0, min(1.0, snow + ice)));
-        vFade = visibility * clamp(intensity * 2.0, 0.25, 1.0) * smoothstep(28.0, 3.0, length(p - cameraPosition));
+        gl_PointSize = clamp(size, mix(1.0, 1.6, snow), mix(24.0, mix(8.0, 12.0, uSnow), min(1.0, snow + ice)));
+        // Flakes are slow and bright: they stay readable further out, and light snow still shows.
+        vFade = visibility * clamp(intensity * 2.0, mix(0.25, 0.6, snow), 1.0) * smoothstep(mix(28.0, 40.0, snow), 3.0, length(p - cameraPosition));
       }`,
     fragmentShader: `
       uniform float uDaylight; uniform float uMoonStrength; uniform float uWind;
