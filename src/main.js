@@ -14,6 +14,7 @@ import { buildCrystal, buildProbe, buildTether, buildCore } from './world/contac
 import { waterHeight } from './world/glsl.js';
 import { pose, pForCamY, theta, setEndAngle, P_SURF, M_PER_UNIT } from './path.js';
 import { buildPost } from './post.js';
+import { createRenderQuality } from './render-quality.js';
 import { Sea } from './audio.js';
 import { stJohnsEnvironment, stormGlow } from './environment.js';
 import { buildWeather } from './world/weather.js';
@@ -48,7 +49,8 @@ else start();
 function start() {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const coarse = matchMedia('(pointer: coarse)').matches;
-  const small = matchMedia('(max-width: 760px)').matches;
+  const cardMobile = matchMedia('(max-width: 760px)');
+  const small = cardMobile.matches;
   const mobile = coarse || small;
 
   // ───────────── Renderer ─────────────
@@ -56,7 +58,9 @@ function start() {
   // No canvas MSAA: the scene renders into the composer's own targets, so the canvas only
   // ever receives one full-screen quad and multisampling it would cost memory for nothing.
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-  let dpr = Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 1.75);
+  const maxDpr = () => Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 1.75);
+  const quality = createRenderQuality({ initialDpr: maxDpr(), maxDpr: maxDpr() });
+  let dpr = quality.dpr;
   renderer.setPixelRatio(dpr);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
@@ -363,16 +367,31 @@ function start() {
   // ───────────── Layout ─────────────
   let W = 1;
   let H = 1;
+  let renderWidth = 0, renderHeight = 0;
+  function sizeRenderTargets() {
+    const ratioChanged = renderer.getPixelRatio() !== quality.dpr;
+    const sizeChanged = W !== renderWidth || H !== renderHeight;
+    if (!ratioChanged && !sizeChanged) return;
+    dpr = quality.dpr;
+    if (ratioChanged) renderer.setPixelRatio(dpr);
+    if (sizeChanged) renderer.setSize(W, H, false);
+    // Each composer setter resizes its passes: only call the setters that changed.
+    if (ratioChanged) composer.setPixelRatio(dpr);
+    if (sizeChanged) composer.setSize(W, H);
+    bloom.setSize(Math.round((W * dpr) / 2), Math.round((H * dpr) / 2));
+    U.uPixelRatio.value = dpr;
+    renderer.getDrawingBufferSize(lens.uniforms.uRes.value);
+    renderWidth = W;
+    renderHeight = H;
+  }
   function resize() {
     // Never zero: a hidden or collapsing window can report 0, and every pointer and aspect
     // calculation divides by these.
     W = Math.max(1, window.innerWidth);
     H = Math.max(1, window.innerHeight);
     placeAboardView(W / H);
-    renderer.setSize(W, H, false);
-    composer.setSize(W, H);
-    composer.setPixelRatio(dpr);
-    bloom.setSize(Math.round((W * dpr) / 2), Math.round((H * dpr) / 2));
+    quality.reset({ maxDpr: maxDpr() });
+    sizeRenderTargets();
     camera.aspect = W / H;
     camera.updateProjectionMatrix();
     // Frame Sirius just above the opening horizon on both desktop and portrait.
@@ -384,7 +403,6 @@ function start() {
     if (W / H > 1.05) starCamera.setViewOffset(W, H, -W * 0.13, 0, W, H);
     starCamera.updateMatrixWorld();
     U.uSiriusDir.value.set(0.04, 0.84, 1).unproject(starCamera).sub(opening.pos).normalize();
-    lens.uniforms.uRes.value.set(W * dpr, H * dpr);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -510,6 +528,32 @@ function start() {
   const card = $('#card');
   let cardFor = null;
   let cardOnLeft = null;
+  let cardWidth = 0, cardHeight = 0;
+  let cardX = '', cardY = '';
+  const cardProjection = new THREE.Vector3();
+  const cardObserver = new ResizeObserver(([entry]) => {
+    const box = entry.borderBoxSize?.[0] ?? entry.borderBoxSize;
+    cardWidth = box?.inlineSize ?? card.offsetWidth;
+    cardHeight = box?.blockSize ?? card.offsetHeight;
+    positionCard();
+  });
+  cardObserver.observe(card, { box: 'border-box' });
+  function positionCard() {
+    if (!cardFor || cardMobile.matches) return;
+    cardProjection.copy(cardFor.pos).project(camera);
+    const x = (cardProjection.x * 0.5 + 0.5) * W;
+    const y = (-cardProjection.y * 0.5 + 0.5) * H;
+    // Keep one side while reading; tiny camera shifts must not flip a wide card.
+    if (cardOnLeft == null) cardOnLeft = x > W * 0.5;
+    let cx = cardOnLeft ? x - cardWidth - 56 : x + 56;
+    if (cardFor.vessel && W / H > 1.05) cx = Math.min(cx, Math.max(16, W * 0.05));
+    cx = Math.max(16, Math.min(W - cardWidth - 96, cx));
+    const cy = Math.max(80, Math.min(H - cardHeight - 24, y - cardHeight * 0.45));
+    const nextX = `${cx.toFixed(1)}px`, nextY = `${cy.toFixed(1)}px`;
+    if (cardX !== nextX) card.style.setProperty('--card-x', cardX = nextX);
+    if (cardY !== nextY) card.style.setProperty('--card-y', cardY = nextY);
+  }
+  cardMobile.addEventListener('change', positionCard);
   let cardReturnFocus = null;
   let contactReturnFocus = null;
   let handlingRoute = false;
@@ -577,7 +621,10 @@ function start() {
     card.style.setProperty('--c', c.color);
     card.hidden = false;
     card.inert = false;
-    void card.offsetWidth;
+    // Reuse the opening transition's event-time layout flush for the unscaled cache.
+    cardWidth = card.offsetWidth;
+    cardHeight = card.offsetHeight;
+    positionCard();
     card.classList.add('open');
     card.focus({ preventScroll: true });
     $('#announce').textContent = `${c.zone.singular}: ${c.title}. ${c.el.querySelector('.line, .role')?.textContent ?? ''}`;
@@ -920,6 +967,10 @@ function start() {
 
   const resurface = $('#resurface');
   const gaugeEl = $('.gauge');
+  const hero = $('#hero'), brandLink = $('.brand a');
+  const depthEl = $('#depth'), tempEl = $('#temp'), pressureEl = $('#atm');
+  const gaugeNow = $('#gauge-now'), gaugeFill = $('#gauge-fill');
+  const hud = {};
   resurface.addEventListener('click', () => {
     pTarget = 0;
     closeCard(false);
@@ -937,6 +988,7 @@ function start() {
   function setLog(open, updateRoute = true) {
     if (open && !root.classList.contains('log-open')) logReturnFocus = document.activeElement;
     root.classList.toggle('log-open', open);
+    syncAnimation();
     $('#dive').inert = open;
     if (open) $('#log').focus({ preventScroll: true });
     else {
@@ -1004,7 +1056,6 @@ function start() {
   let stormTime = 0;
   let thunderCycle = -1;
   let hovered = null;
-  const perf = { n: 0, time: 0, done: false };
 
   function tick(dt, draw = true, stormDt = dt) {
     environment.step(stormDt);
@@ -1299,44 +1350,39 @@ function start() {
       el.classList.toggle('hover', hovered === c);
     }
 
-    // Card follows its contact.
-    if (cardFor) {
-      v.copy(cardFor.pos).project(camera);
-      const x = (v.x * 0.5 + 0.5) * W;
-      const y = (-v.y * 0.5 + 0.5) * H;
-      const cw = card.offsetWidth;
-      const ch = card.offsetHeight;
-      // Keep one side while reading; tiny camera shifts must not flip a wide card.
-      if (cardOnLeft == null) cardOnLeft = x > W * 0.5;
-      let cx = cardOnLeft ? x - cw - 56 : x + 56;
-      // Aboard on a wide screen, the boat fills the middle: keep the card out on the open sea.
-      if (cardFor.vessel && W / H > 1.05) cx = Math.min(cx, Math.max(16, W * 0.05));
-      cx = Math.max(16, Math.min(W - cw - 96, cx));
-      const cy = Math.max(80, Math.min(H - ch - 24, y - ch * 0.45));
-      card.style.left = `${cx}px`;
-      card.style.top = `${cy}px`;
-    }
+    positionCard();
 
     // HUD.
     // Aboard, the boat has the stage; the title returns when the card closes.
     const heroReveal = returning.on ? smooth((returning.k - 0.45) / 0.55) : ascent.on || transit.on ? 0 : 1 - (cardFor?.vessel ? focusK : 0);
     const heroK = (1 - smooth(p / 0.045)) * heroReveal;
-    const hero = $('#hero');
-    hero.style.opacity = heroK.toFixed(3);
-    hero.style.transform = `translateY(${((1 - heroK) * -30).toFixed(1)}px)`;
-    hero.style.visibility = heroK < 0.01 ? 'hidden' : 'visible';
-    $('.brand a').classList.toggle('show', heroK < 0.2);
+    const opacity = heroK.toFixed(3);
+    const transform = `translateY(${((1 - heroK) * -30).toFixed(1)}px)`;
+    const visibility = heroK < 0.01 ? 'hidden' : 'visible';
+    if (hud.opacity !== opacity) hero.style.opacity = hud.opacity = opacity;
+    if (hud.transform !== transform) hero.style.transform = hud.transform = transform;
+    if (hud.visibility !== visibility) hero.style.visibility = hud.visibility = visibility;
     // The gauge arrives with the dive, so the surface screen belongs to the title.
-    gaugeEl.classList.toggle('show', heroK < 0.2);
-    $('#depth').textContent = String(Math.round(depthM)).padStart(3, '0');
+    if (hud.compact !== (heroK < 0.2)) {
+      hud.compact = heroK < 0.2;
+      brandLink.classList.toggle('show', hud.compact);
+      gaugeEl.classList.toggle('show', hud.compact);
+    }
+    const depthText = String(Math.round(depthM)).padStart(3, '0');
+    if (hud.depth !== depthText) depthEl.textContent = hud.depth = depthText;
     const frac = Math.min(1, depthM / MAX_M);
-    $('#gauge-now').style.top = `${frac * 100}%`;
-    $('#gauge-fill').style.height = `${frac * 100}%`;
-    $('#temp').textContent = (1.8 - depthM * 0.017).toFixed(1).replace('-', '−');
-    $('#atm').textContent = (1 + depthM / 10).toFixed(1);
+    const gaugePosition = `${frac * 100}%`;
+    if (hud.gauge !== gaugePosition) {
+      gaugeNow.style.top = gaugeFill.style.height = hud.gauge = gaugePosition;
+    }
+    const temperature = (1.8 - depthM * 0.017).toFixed(1).replace('-', '−');
+    const pressure = (1 + depthM / 10).toFixed(1);
+    if (hud.temperature !== temperature) tempEl.textContent = hud.temperature = temperature;
+    if (hud.pressure !== pressure) pressureEl.textContent = hud.pressure = pressure;
     const atBottom = p > 0.93 && under && !ascent.on;
-    resurface.hidden = p < 0.4 || atBottom || ascent.on;
-    aboardBtn.hidden = !atBottom;
+    const hideResurface = p < 0.4 || atBottom || ascent.on;
+    if (resurface.hidden !== hideResurface) resurface.hidden = hideResurface;
+    if (aboardBtn.hidden !== !atBottom) aboardBtn.hidden = !atBottom;
 
     // The anchor as the way up: a sonar ring on arrival, a slow breathing glow (stronger if the
     // visitor lingers), and full light while it or its button is pointed at.
@@ -1347,11 +1393,12 @@ function start() {
     const anchorHot = under && (hovered === aboard || (aboardBtnHot && !aboardBtn.hidden));
     U.uAnchorHover.value += ((anchorHot ? 1 : 0) - U.uAnchorHover.value) * (1 - Math.exp(-dt * 8));
     U.uAnchorIdle.value = arrive * (0.45 + 0.55 * linger) * (0.3 + 0.7 * breathe);
-    aboardBtn.classList.toggle('hot', under && hovered === aboard);
+    const aboardHot = under && hovered === aboard;
+    if (hud.aboardHot !== aboardHot) aboardBtn.classList.toggle('hot', hud.aboardHot = aboardHot);
     v.copy(ringWorld).project(camera);
     anchorMk.style.transform = `translate3d(${((v.x * 0.5 + 0.5) * W).toFixed(1)}px, ${((-v.y * 0.5 + 0.5) * H).toFixed(1)}px, 0)`;
     anchorMk.style.opacity = (atBottom && v.z < 1 && !cardFor ? arrive : 0).toFixed(2);
-    if (started || !aboardBtn.hidden || !resurface.hidden) hint.classList.add('gone');
+    if ((started || !aboardBtn.hidden || !resurface.hidden) && !hint.classList.contains('gone')) hint.classList.add('gone');
 
     lens.uniforms.uTime.value = t;
     lens.uniforms.uUnder.value = underK * (reduced ? 0 : 1);
@@ -1365,38 +1412,37 @@ function start() {
 
     sea.update(under, depthM, dt);
     if (draw) composer.render();
-
-    if (!perf.done && t > 1.5) {
-      perf.n++;
-      perf.time += dt;
-      if (perf.time > 3) {
-        perf.done = true;
-        if (perf.n / perf.time < 38 && dpr > 1) {
-          dpr = 1;
-          renderer.setPixelRatio(1);
-          resize();
-        }
-      }
-    }
   }
 
-  let last = performance.now();
-  let running = true;
+  let last = null;
+  let frameId = null;
+  let animationEligible = null;
+  const canAnimate = () => !document.hidden && !root.classList.contains('log-open');
+  function syncAnimation() {
+    const eligible = canAnimate();
+    if (eligible !== animationEligible) {
+      animationEligible = eligible;
+      last = null;
+      quality.reset();
+    }
+    if (!eligible && frameId !== null) {
+      cancelAnimationFrame(frameId);
+      frameId = null;
+    }
+    if (eligible && frameId === null) frameId = requestAnimationFrame(frame);
+  }
   function frame(now) {
-    if (!running) return;
-    const elapsed = Math.max(0, (now - last) / 1000);
+    frameId = null;
+    if (!canAnimate()) { syncAnimation(); return; }
+    const elapsed = last === null ? 0 : Math.max(0, (now - last) / 1000);
     last = now;
-    tick(Math.min(0.05, elapsed), true, elapsed);
-    requestAnimationFrame(frame);
-  }
-  document.addEventListener('visibilitychange', () => {
-    running = !document.hidden;
-    if (running) {
-      last = performance.now();
-      requestAnimationFrame(frame);
+    if (elapsed > 0) {
+      if (quality.sample(elapsed) !== null) sizeRenderTargets();
+      tick(Math.min(0.05, elapsed), true, elapsed);
     }
-  });
-  requestAnimationFrame(frame);
+    syncAnimation();
+  }
+  document.addEventListener('visibilitychange', syncAnimation);
   requestAnimationFrame(() => $('#curtain').classList.add('up'));
 
   function applyRoute() {
@@ -1417,7 +1463,10 @@ function start() {
     }
   }
   window.addEventListener('hashchange', applyRoute);
+  // Establish a frozen surface and valid camera pose before a direct #log route pauses it.
+  if (canAnimate()) tick(0);
   applyRoute();
+  syncAnimation();
 
   if (import.meta.env.DEV) {
     window.__dive = {

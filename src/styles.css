@@ -745,6 +745,7 @@ a {
   pointer-events: auto;
   opacity: 0;
   transform: translateY(8px) scale(0.98);
+  translate: var(--card-x, 0px) var(--card-y, 0px);
   transition:
     opacity 0.35s ease,
     transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1236,6 +1237,7 @@ a {
     display: none;
   }
   #card {
+    translate: none;
     left: 12px !important;
     right: 12px;
     top: auto !important;
@@ -1533,11 +1535,11 @@ a {
   position: absolute;
   inset: 0;
   border: 28px solid transparent;
-  border-image: url('/images/cards/frosted-ice-frame.png') 170 fill / 28px / 0 stretch;
+  border-image: url('/images/cards/frosted-ice-frame.webp') 170 fill / 28px / 0 stretch;
   transition: opacity 0.8s ease;
 }
 .card-frame::after {
-  border-image-source: url('/images/cards/deep-water-frame.png');
+  border-image-source: url('/images/cards/deep-water-frame.webp');
   border-image-width: 32px 28px 32px 62px;
   opacity: 0;
 }

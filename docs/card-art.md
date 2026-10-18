@@ -9,13 +9,47 @@ mobile continuation. Expanded highlights remain available while scrolling.
 
 ## Assets
 
-- `public/images/cards/frosted-ice-frame.png`
-- `public/images/cards/deep-water-frame.png`
+- Runtime: `public/images/cards/frosted-ice-frame.webp`
+- Runtime: `public/images/cards/deep-water-frame.webp`
+- Original sources retained: `public/images/cards/frosted-ice-frame.png` and
+  `public/images/cards/deep-water-frame.png`.
 
-Both are genuine RGBA frames with transparent reading areas. They were made with the
+Both sources are genuine RGBA frames with transparent reading areas. They were made with the
 built-in Image Gen tool from the selected concept references and copied into the project.
 CSS uses nine-slice borders rather than stretching the full image across the text.
 No generated text or controls are shipped as images.
+
+### Runtime encoding (2026-10-18)
+
+The WebPs are codec conversions of those original PNGs, with no new artwork generation.
+Both remain 1254 x 1254 RGBA. Pillow 12.3.0 with libwebp 1.6.0 encoded the selected
+quality-85 candidates using method 6, lossless alpha (`alpha_quality=100`), and
+`exact=True`. Decoded alpha matches each PNG pixel for pixel, including the transparent
+reading area and outside corners. CSS still uses slice 170 and the original border widths.
+
+Reproduce from the repository root with that Pillow/libwebp version:
+
+```powershell
+@'
+from pathlib import Path
+from PIL import Image
+for path in Path('public/images/cards').glob('*.png'):
+    Image.open(path).convert('RGBA').save(
+        path.with_suffix('.webp'), format='WEBP', quality=85,
+        method=6, alpha_quality=100, exact=True)
+'@ | python -
+```
+
+Compared candidates (frosted / deep-water bytes): lossless with `lossless=True,
+quality=100, method=6, exact=True`: 434,832 / 501,778; quality 90 with the selected
+options except `quality=90`: 179,864 / 211,746; selected quality 85: 154,080 / 183,728.
+Magnified corner comparisons retained the ice fractures, bubbles, edge glow and alpha
+without visible objectionable artifacts; quality 85 was the smallest acceptable candidate.
+
+The original PNGs total 1,344,476 bytes (648,980 / 695,496). Runtime WebPs total
+337,808 bytes: 1,006,668 fewer bytes, a 74.87% reduction in card frame requests.
+The retained PNGs are still copied into `dist` by Vite, so this is a runtime transfer
+reduction, not an equivalent reduction in deployment artifact size. No preloads are added.
 
 ## Final generation prompts
 
