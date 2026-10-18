@@ -109,6 +109,12 @@ export function buildWater(uniforms, { mobile }) {
           vec3 col = mix(body, refl, fres) + spec;
           col = mix(col, vec3(0.8, 0.86, 0.9) * (0.12 + uAmbient * 0.43 + 0.45 * length(directIrradiance(n, 1.0))), foam * 0.85);
           float haze = smoothstep(1600.0, 12000.0, dist);
+          // Curvature brings the visible horizon inside the mesh's outer edge.
+          // Fade grazing reflections into the sky before their flat distant normals
+          // turn the low sun's glint into a hard horizontal band. Keep nearby waves.
+          float grazing = abs(dot(normalize(vN), V));
+          float horizonHaze = (1.0 - smoothstep(0.002, 0.018, grazing)) * smoothstep(460.0, 1600.0, dist);
+          haze = max(haze, horizonHaze);
           float atmosphere = 1.0 - (1.0 - haze) * (1.0 - airFog(dist));
           // Match the actual background ray, rather than sampling a fixed sky elevation.
           // At the outer grid edge this becomes exactly the sky behind it, hiding the seam.
