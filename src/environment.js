@@ -149,6 +149,9 @@ export function stJohnsEnvironment(onChange) {
     }
     addOption(groups.get(preset.group), preset.id, preset.label);
   });
+  // Only touch the DOM when a value actually changes: live mode republishes every second.
+  const setText = (el, value) => { if (el.textContent !== value) el.textContent = value; };
+  const setAttr = (el, name, value) => { if (el.getAttribute(name) !== value) el.setAttribute(name, value); };
   function publish() {
     if (disposed) return;
     if (weather && Date.now() - fetchedAt > 30 * MINUTE) weather = null;
@@ -158,30 +161,38 @@ export function stJohnsEnvironment(onChange) {
     currentConditions = conditions;
     const sea = conditions.sea;
     const previewing = preview || fixedPreview;
+    // Always visible: the toggle's status line.
+    setText(statusContext, previewing ? 'Preview · ' : 'St. John’s · ');
+    setText(statusCondition, fixedPreview ? 'Sky preview' : preview ? conditions.label : weather ? weather.description : conditions.period.toLowerCase());
+    setAttr(toggle, 'aria-label', `${status.textContent}. St. John's sky settings`);
+    // The panel's contents are only written while it is open; opening it publishes afresh.
+    if (!panel.hidden) renderPanel(conditions, sea, previewing);
+    onChange(conditions, Boolean(fixedPreview));
+  }
+  function renderPanel(conditions, sea, previewing) {
     const compass = (angle) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(angle / 45) % 8];
-    marineStatus.textContent = sea.source === 'model' ? `Offshore sea · ${marineFailed ? 'cached ' : ''}marine model` : previewing ? 'Sea · illustrative preview' : loading ? 'Sea · loading marine model…' : 'Sea · weather-based estimate';
-    marineDetails.textContent = `Waves ${sea.data.waves.height.toFixed(1)} m · ${sea.data.waves.period.toFixed(1)} s · from ${compass(sea.data.waves.direction)}. ${sea.data.current ? `Surface current ${sea.data.current.speed.toFixed(1)} km/h toward ${compass(sea.data.current.direction)}.` : 'Surface current unavailable.'}${sea.limited ? ' Extreme wave motion is softened for the dive.' : ''}`;
-    marineTime.textContent = sea.source === 'model' ? `Model time · ${stJohnsTime(new Date(sea.data.validAt))}` : 'Wave motion estimated from this weather mix.';
-    marineTime.title = sea.source === 'model' ? `Offshore model cell: ${sea.data.latitude ?? 'unknown'}°, ${sea.data.longitude ?? 'unknown'}°. ${new Date(sea.data.validAt).toISOString()}` : '';
-    marineStatus.dataset.source = sea.source;
-    statusContext.textContent = previewing ? 'Preview · ' : 'St. John’s · ';
-    statusCondition.textContent = fixedPreview ? 'Sky preview' : preview ? conditions.label : weather ? weather.description : conditions.period.toLowerCase();
-    clock.textContent = `St. John's · ${stJohnsTime()}${previewing ? ' · example sky' : ''}`;
-    returnCity.hidden = !previewing;
-    pickerValue.textContent = fixedPreview ? 'Sky preview' : preview ? WEATHER_PRESETS.find((p) => p.id === preview).label : 'Live St. John’s weather';
-    panel.dataset.mode = fixedPreview ? 'preview' : preview ? 'preset' : 'live';
+    setText(marineStatus, sea.source === 'model' ? `Offshore sea · ${marineFailed ? 'cached ' : ''}marine model` : previewing ? 'Sea · illustrative preview' : loading ? 'Sea · loading marine model…' : 'Sea · weather-based estimate');
+    setText(marineDetails, `Waves ${sea.data.waves.height.toFixed(1)} m · ${sea.data.waves.period.toFixed(1)} s · from ${compass(sea.data.waves.direction)}. ${sea.data.current ? `Surface current ${sea.data.current.speed.toFixed(1)} km/h toward ${compass(sea.data.current.direction)}.` : 'Surface current unavailable.'}${sea.limited ? ' Extreme wave motion is softened for the dive.' : ''}`);
+    setText(marineTime, sea.source === 'model' ? `Model time · ${stJohnsTime(new Date(sea.data.validAt))}` : 'Wave motion estimated from this weather mix.');
+    const marineTitle = sea.source === 'model' ? `Offshore model cell: ${sea.data.latitude ?? 'unknown'}°, ${sea.data.longitude ?? 'unknown'}°. ${new Date(sea.data.validAt).toISOString()}` : '';
+    if (marineTime.title !== marineTitle) marineTime.title = marineTitle;
+    if (marineStatus.dataset.source !== sea.source) marineStatus.dataset.source = sea.source;
+    setText(clock, `St. John's · ${stJohnsTime()}${previewing ? ' · example sky' : ''}`);
+    if (returnCity.hidden !== !previewing) returnCity.hidden = !previewing;
+    setText(pickerValue, fixedPreview ? 'Sky preview' : preview ? WEATHER_PRESETS.find((p) => p.id === preview).label : 'Live St. John’s weather');
+    const mode = fixedPreview ? 'preview' : preview ? 'preset' : 'live';
+    if (panel.dataset.mode !== mode) panel.dataset.mode = mode;
     optionButtons.forEach((button) => {
       const selected = !fixedPreview && button.dataset.value === preview;
-      button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
+      setAttr(button, 'aria-selected', String(selected));
+      if (button.tabIndex !== (selected ? 0 : -1)) button.tabIndex = selected ? 0 : -1;
     });
-    toggle.setAttribute('aria-label', `${status.textContent}. St. John's sky settings`);
-    refreshButton.disabled = loading;
-    refreshButton.textContent = loading ? 'Updating weather…' : 'Refresh St. John’s weather';
-    message.textContent = preview || fixedPreview ? 'An example made from the same light, cloud, precipitation, fog and wind parameters as the live scene.'
+    if (refreshButton.disabled !== loading) refreshButton.disabled = loading;
+    setText(refreshButton, loading ? 'Updating weather…' : 'Refresh St. John’s weather');
+    setText(message, preview || fixedPreview ? 'An example made from the same light, cloud, precipitation, fog and wind parameters as the live scene.'
       : weather ? 'Live weather and sun/moon lighting for St. John’s, Newfoundland.'
       : loading ? 'Getting the latest weather for St. John’s. Its sun and moon are already in position.'
-      : 'Weather is temporarily unavailable. Lighting still follows the real St. John’s sun and moon.';
-    onChange(conditions, Boolean(fixedPreview));
+      : 'Weather is temporarily unavailable. Lighting still follows the real St. John’s sun and moon.');
   }
   async function refresh() {
     if (disposed || loading || document.hidden) return;
@@ -228,6 +239,7 @@ export function stJohnsEnvironment(onChange) {
   function togglePanel() {
     if (!panel.hidden) { close(); return; }
     panel.hidden = false; toggle.setAttribute('aria-expanded', 'true');
+    publish();
   }
   function followCity() { preview = ''; fixedPreview = null; publish(); close(); toggle.focus(); }
   function choosePreview(e) {

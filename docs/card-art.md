@@ -11,8 +11,8 @@ mobile continuation. Expanded highlights remain available while scrolling.
 
 - Runtime: `public/images/cards/frosted-ice-frame.webp`
 - Runtime: `public/images/cards/deep-water-frame.webp`
-- Original sources retained: `public/images/cards/frosted-ice-frame.png` and
-  `public/images/cards/deep-water-frame.png`.
+- Original sources retained outside `public/` so they don't ship with the site:
+  `art/cards/frosted-ice-frame.png` and `art/cards/deep-water-frame.png`.
 
 Both sources are genuine RGBA frames with transparent reading areas. They were made with the
 built-in Image Gen tool from the selected concept references and copied into the project.

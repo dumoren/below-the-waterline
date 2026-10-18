@@ -5,8 +5,9 @@
   "type": "module",
   "description": "Below the Waterline: Derek Umoren's portfolio as an iceberg dive.",
   "scripts": {
+    "test": "node --test \"test/*.test.js\"",
     "test:performance": "node --test test/render-quality.test.js",
-    "test:environment": "node --test test/environment.test.js test/astronomy.test.js test/underwater-environment.test.js test/marine-environment.test.js",
+    "test:environment": "node --test test/environment.test.js test/astronomy.test.js test/underwater-environment.test.js test/marine-environment.test.js test/lightning.test.js",
     "test:seabed": "node --test test/seabed-life.test.js",
     "test:camera": "node --test test/camera-route.test.js",
     "dev": "vite",

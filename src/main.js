@@ -821,7 +821,9 @@ function start() {
     (e) => {
       if (root.classList.contains('log-open')) return;
       if (e.target.closest?.('#weather-control')) return;
-      if (e.target.closest?.('#card')) return;
+      // A card that can scroll keeps the wheel for reading; a short card lets the dive continue.
+      const cardBody = e.target.closest?.('#card') && card.querySelector('.card-body');
+      if (cardBody && cardBody.scrollHeight > cardBody.clientHeight + 1) return;
       if (e.target.closest?.('#scene-zoom')) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
