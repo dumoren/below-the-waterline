@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { sceneConditions, decodeWeather, fetchStJohnsWeather, ST_JOHNS, stJohnsTime, WEATHER_PRESETS, previewConditions, stormGlow } from '../src/environment.js';
+import { sceneConditions, decodeWeather, fetchStJohnsWeather, ST_JOHNS, stJohnsTime, WEATHER_PRESETS, previewConditions, stormGlow, weatherRetryDelay } from '../src/environment.js';
 import { WEATHER_PARAMETERS, normalizeWeatherParameters, weatherParameters, composeWeatherConditions } from '../src/weather-parameters.js';
 
 const clear = decodeWeather({ cloud_cover: 0, precipitation: 0, weather_code: 0, wind_speed_10m: 5 });
@@ -192,4 +192,13 @@ test('live weather requests the individual observations used by the studio', asy
     assert.equal(url.searchParams.get('precipitation_unit'), 'mm');
     return { ok: true, json: async () => ({ current: { cloud_cover: 58, precipitation: 0, weather_code: 2, wind_speed_10m: 21, visibility: 6000 } }) };
   } });
+});
+
+test('a failed weather fetch retries quickly, then backs off to the normal refresh', () => {
+  const MINUTE = 60_000;
+  assert.equal(weatherRetryDelay(0), 15 * MINUTE);
+  assert.equal(weatherRetryDelay(1), 30_000);
+  assert.equal(weatherRetryDelay(2), 2 * MINUTE);
+  assert.equal(weatherRetryDelay(3), 5 * MINUTE);
+  assert.equal(weatherRetryDelay(9), 5 * MINUTE);
 });

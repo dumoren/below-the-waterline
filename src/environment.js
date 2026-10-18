@@ -93,6 +93,13 @@ export function stormGlow(time, strength, reduced = false) {
 
 export const sceneConditions = astronomicalConditions;
 
+// Fresh data refreshes every 15 minutes. After failed attempts in a row, retry soon
+// (a first fetch can lose to shader compilation on load), then back off.
+const RETRY_DELAYS = [30_000, 120_000, 300_000];
+export function weatherRetryDelay(failures) {
+  return failures > 0 ? RETRY_DELAYS[Math.min(failures, RETRY_DELAYS.length) - 1] : 15 * 60_000;
+}
+
 export async function fetchStJohnsWeather({ signal, fetcher = fetch } = {}) {
   const url = new URL('https://api.open-meteo.com/v1/forecast');
   // Always the portfolio's city. No visitor location or location permission is used.
@@ -129,6 +136,7 @@ export function stJohnsEnvironment(onChange) {
   let preview = '', weather = null, fetchedAt = 0, attemptAt = 0;
   let marine = null, marineFetchedAt = 0, marineFailed = false;
   let loading = false, request = null, disposed = false, generation = 0;
+  let failures = 0, retryTimer = null;
   const MINUTE = 60_000;
   const groups = new Map();
   const optionButtons = [];
@@ -163,7 +171,7 @@ export function stJohnsEnvironment(onChange) {
     const previewing = preview || fixedPreview;
     // Always visible: the toggle's status line.
     setText(statusContext, previewing ? 'Preview · ' : 'St. John’s · ');
-    setText(statusCondition, fixedPreview ? 'Sky preview' : preview ? conditions.label : weather ? weather.description : conditions.period.toLowerCase());
+    setText(statusCondition, fixedPreview ? 'Sky preview' : preview ? conditions.label : weather ? weather.description : conditions.period);
     setAttr(toggle, 'aria-label', `${status.textContent}. St. John's sky settings`);
     // The panel's contents are only written while it is open; opening it publishes afresh.
     if (!panel.hidden) renderPanel(conditions, sea, previewing);
@@ -216,7 +224,14 @@ export function stJohnsEnvironment(onChange) {
       ]);
     } finally {
       clearTimeout(timeout);
-      if (!disposed && id === generation) { loading = false; request = null; publish(); }
+      if (!disposed && id === generation) {
+        loading = false; request = null;
+        failures = weather && !marineFailed ? 0 : failures + 1;
+        clearTimeout(retryTimer);
+        // The minute timer is too coarse for the first retry.
+        if (failures) retryTimer = setTimeout(update, weatherRetryDelay(failures));
+        publish();
+      }
     }
   }
   function closePicker() { options.hidden = true; panel.classList.remove('choosing-sky'); picker.setAttribute('aria-expanded', 'false'); }
@@ -283,7 +298,7 @@ export function stJohnsEnvironment(onChange) {
   function update() {
     if (document.hidden || disposed) return;
     publish();
-    if (Date.now() - attemptAt >= 15 * MINUTE) refresh();
+    if (Date.now() - attemptAt >= weatherRetryDelay(failures)) refresh();
   }
   toggle.addEventListener('click', togglePanel);
   refreshButton.addEventListener('click', refreshCity);
@@ -314,7 +329,7 @@ export function stJohnsEnvironment(onChange) {
       publish();
     },
     dispose() {
-      disposed = true; generation++; clearInterval(timer); request?.abort();
+      disposed = true; generation++; clearInterval(timer); clearTimeout(retryTimer); request?.abort();
       toggle.removeEventListener('click', togglePanel);
       refreshButton.removeEventListener('click', refreshCity);
       returnCity.removeEventListener('click', followCity);
