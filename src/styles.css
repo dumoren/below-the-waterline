@@ -1048,6 +1048,13 @@ a {
 .has-scene-zoom #aboard {
   bottom: calc(112px + env(safe-area-inset-bottom));
 }
+/* A phone card spans the screen; zoom returns with the scene when it closes. */
+@media (max-width: 760px) {
+  .card-open .scene-zoom {
+    visibility: hidden;
+    opacity: 0;
+  }
+}
 
 /* ─────────── Dive log (overlay + no-JS page) ─────────── */
 
@@ -1430,7 +1437,8 @@ a {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding-right: 30px;
+  /* Clear the 44px close button so the depth label never runs under it. */
+  padding-right: 44px;
 }
 #card .card-d {
   color: var(--dim);
@@ -1506,218 +1514,6 @@ a {
 }
 #card[data-section='toolkit'] {
   width: min(380px, calc(100vw - 32px));
-}
-
-/* The selected concepts share a reading plane; their material and depth rail follow the sky. */
-#card[data-weather] {
-  --card-inset: 28px;
-  width: min(480px, calc(100vw - 32px));
-  border: 0;
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(17, 48, 64, 0.94), rgba(2, 16, 27, 0.97) 60%);
-  box-shadow: 0 24px 70px rgba(0, 4, 12, 0.45), 0 0 24px rgba(93, 212, 255, 0.06);
-  isolation: isolate;
-  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.7s ease;
-}
-#card[data-weather='light'] {
-  --card-inset: 84px;
-  background: linear-gradient(135deg, rgba(8, 28, 45, 0.98), rgba(2, 13, 25, 0.98) 70%);
-}
-.card-frame {
-  position: absolute;
-  z-index: 1;
-  inset: -6px;
-  pointer-events: none;
-}
-.card-frame::before,
-.card-frame::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 28px solid transparent;
-  border-image: url('/images/cards/frosted-ice-frame.webp') 170 fill / 28px / 0 stretch;
-  transition: opacity 0.8s ease;
-}
-.card-frame::after {
-  border-image-source: url('/images/cards/deep-water-frame.webp');
-  border-image-width: 32px 28px 32px 62px;
-  opacity: 0;
-}
-#card[data-weather='light'] .card-frame::before {
-  opacity: 0;
-}
-#card[data-weather='light'] .card-frame::after {
-  opacity: 1;
-}
-#card[data-weather]::before {
-  z-index: 3;
-  left: var(--card-inset);
-  top: 2px;
-  width: 40px;
-}
-#card[data-weather]::after {
-  content: '';
-  position: absolute;
-  z-index: 1;
-  left: 18px;
-  top: 24px;
-  bottom: 24px;
-  width: 47px;
-  border-right: 1px solid rgba(114, 214, 255, 0.3);
-  background: repeating-linear-gradient(to bottom, rgba(114, 214, 255, 0.3) 0 1px, transparent 1px 26px) 19px 64px / 8px calc(100% - 64px) no-repeat;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.8s ease;
-}
-#card[data-weather='light']::after {
-  opacity: 1;
-}
-#card[data-weather] .card-body {
-  position: relative;
-  z-index: 2;
-  padding: 28px 28px 26px var(--card-inset);
-  mask-image: linear-gradient(to bottom, transparent, black 14px, black calc(100% - 18px), transparent);
-  transition: padding-left 0.7s ease;
-}
-#card[data-weather] .card-x {
-  z-index: 4;
-  top: 14px;
-  right: 14px;
-  color: #a6cfdf;
-  background: rgba(3, 18, 30, 0.93);
-}
-#card[data-weather] .card-k {
-  margin-bottom: 16px;
-  line-height: 1.35;
-}
-#card[data-weather] .card-d {
-  color: #9fc3d5;
-}
-#card[data-weather='light'] .card-d {
-  position: absolute;
-  left: 17px;
-  top: 28px;
-  width: 47px;
-  padding: 3px 1px;
-  border-radius: 3px;
-  background: rgba(3, 18, 30, 0.88);
-  line-height: 1.4;
-  text-align: center;
-}
-#card[data-weather] h2 {
-  font-size: 32px;
-  line-height: 1.08;
-}
-#card[data-weather='light'] h2 {
-  font-size: 30px;
-}
-#card[data-weather] .role {
-  font-size: 17px;
-  line-height: 1.4;
-}
-#card[data-weather] .when {
-  margin-top: 14px;
-  line-height: 1.55;
-}
-#card[data-weather] .line {
-  margin-top: 20px;
-  font-size: 15.5px;
-  line-height: 1.55;
-  color: #b7d1df;
-}
-#card[data-weather] .details {
-  margin-top: 18px;
-  padding-top: 17px;
-  border-top: 1px solid rgba(114, 214, 255, 0.24);
-}
-#card[data-weather] .highlights {
-  gap: 14px;
-  list-style: none;
-  padding-left: 20px;
-  color: #bdd0dc;
-}
-#card[data-weather] .highlights li {
-  position: relative;
-  padding-left: 0;
-}
-#card[data-weather] .highlights li::before {
-  content: '';
-  position: absolute;
-  top: 0.64em;
-  left: -19px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--c, var(--sonar));
-  box-shadow: 0 0 9px color-mix(in srgb, var(--c, var(--sonar)) 65%, transparent);
-}
-#card[data-weather] .more {
-  border-color: rgba(114, 214, 255, 0.24);
-}
-#card[data-weather] .more summary {
-  padding: 15px 0;
-  list-style: none;
-  font-size: 14px;
-  color: #c2dce8;
-}
-#card[data-weather] .more summary::-webkit-details-marker {
-  display: none;
-}
-#card[data-weather] .more summary::before {
-  content: '';
-  display: inline-block;
-  width: 12px;
-  height: 8px;
-  margin-right: 12px;
-  background: #a6d3e7;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") center / contain no-repeat;
-  transition: transform 0.2s ease;
-}
-#card[data-weather] .more[open] summary::before {
-  transform: rotate(180deg);
-}
-#card[data-weather] .tags li {
-  border-color: rgba(125, 201, 230, 0.3);
-  color: #c8e0ed;
-}
-@media (max-width: 760px) {
-  #card[data-weather],
-  #card[data-weather='light'] {
-    --card-inset: 23px;
-    width: auto;
-  }
-  #card[data-weather] .card-body {
-    padding: 25px 23px 24px;
-  }
-  .card-frame::after {
-    border-image-width: 28px;
-  }
-  #card[data-weather] h2,
-  #card[data-weather='light'] h2 {
-    font-size: 29px;
-  }
-  #card[data-weather='light'] .card-d {
-    position: static;
-    width: auto;
-    padding: 0;
-    background: none;
-    text-align: right;
-  }
-  #card[data-weather]::after {
-    display: none;
-  }
-  #card[data-weather] .card-x {
-    right: 10px;
-    top: 12px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .card-frame::before,
-  .card-frame::after,
-  #card[data-weather]::after,
-  #card[data-weather] .card-body {
-    transition: none;
-  }
 }
 
 /* The log, grouped by section. */

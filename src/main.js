@@ -626,6 +626,7 @@ function start() {
     cardHeight = card.offsetHeight;
     positionCard();
     card.classList.add('open');
+    root.classList.add('card-open');
     card.focus({ preventScroll: true });
     $('#announce').textContent = `${c.zone.singular}: ${c.title}. ${c.el.querySelector('.line, .role')?.textContent ?? ''}`;
   }
@@ -642,6 +643,7 @@ function start() {
     cardReturnFocus = null;
     card.inert = true;
     card.classList.remove('open');
+    root.classList.remove('card-open');
     if (restoreFocus) {
       if (trigger?.isConnected && trigger.closest('#log')) setLog(true, updateRoute);
       const target = trigger?.isConnected && trigger.getClientRects().length && !trigger.closest('[hidden], [inert]') ? trigger : fallback;
@@ -1078,12 +1080,6 @@ function start() {
     if (!reduced) U.uCurrentOffset.value.addScaledVector(U.uSeaCurrent.value, dt);
     U.uLightning.value = stormGlow(stormTime, U.uThunder.value, reduced);
     lightning.userData.update(stormTime, camera.aspect);
-    // Use the rendered sky, including cloud/storm dimming, rather than the visitor's clock.
-    // A small dead band keeps the frame stable around dawn and changing cloud cover.
-    const skyBrightness = U.uDaylight.value * (1 - U.uCloud.value * 0.65) * (1 - U.uThunder.value * 0.45) + U.uTwilight.value * 0.1;
-    const cardTheme = card.dataset.weather;
-    const nextCardTheme = cardTheme === 'light' ? (skyBrightness < 0.36 ? 'dark' : 'light') : (skyBrightness > 0.46 ? 'light' : 'dark');
-    if (cardTheme !== nextCardTheme) card.dataset.weather = nextCardTheme;
     const stormCycle = Math.floor(stormTime / 19);
     // The rumble arrives several seconds after the distant bolt, using the sound toggle.
     if (stormTime % 19 >= 8 && stormCycle !== thunderCycle) {
