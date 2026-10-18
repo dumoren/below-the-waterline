@@ -531,6 +531,32 @@ function start() {
   let cardWidth = 0, cardHeight = 0;
   let cardX = '', cardY = '';
   const cardProjection = new THREE.Vector3();
+  // The ship's bounds in its own axes (a world box overstates a ship seen at an angle),
+  // projected with its current pose to frame it beside the aboard card.
+  const shipBounds = new THREE.Box3();
+  const shipCorner = new THREE.Vector3();
+  {
+    vessel.updateMatrixWorld(true);
+    const toShip = vessel.matrixWorld.clone().invert();
+    const toLocal = new THREE.Matrix4();
+    vessel.traverse((o) => {
+      if (!o.isMesh) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      shipBounds.union(o.geometry.boundingBox.clone().applyMatrix4(toLocal.multiplyMatrices(toShip, o.matrixWorld)));
+    });
+  }
+  /** The ship's left and right screen edges, in pixels, for the camera's current projection. */
+  function shipScreenSpan() {
+    let left = Infinity, right = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      shipCorner.set(i & 1 ? shipBounds.max.x : shipBounds.min.x, i & 2 ? shipBounds.max.y : shipBounds.min.y, i & 4 ? shipBounds.max.z : shipBounds.min.z).applyMatrix4(vessel.matrixWorld).project(camera);
+      if (shipCorner.z >= 1) continue;
+      const x = (shipCorner.x * 0.5 + 0.5) * W;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+    }
+    return [left, right];
+  }
   const cardObserver = new ResizeObserver(([entry]) => {
     const box = entry.borderBoxSize?.[0] ?? entry.borderBoxSize;
     cardWidth = box?.inlineSize ?? card.offsetWidth;
@@ -670,6 +696,7 @@ function start() {
   let focusK = 0;
   let under = false;
   let underK = 0;
+  let aboardFitK = 0;
   let t = 0;
   let found = 0;
   let lastPing = -99;
@@ -1206,7 +1233,25 @@ function start() {
     zoomIn.disabled = zoomTarget >= MAX_ZOOM - 0.005;
     const zoomText = `${camera.zoom.toFixed(2).replace(/0$/, '')}×`;
     if (zoomLevel.textContent !== zoomText) zoomLevel.textContent = zoomText;
-    if (viewOffset > 0.001 && W / H > 1.05) camera.setViewOffset(W, H, -W * 0.13 * viewOffset, 0, W, H);
+    // Aboard on wide screens the card sits over the sea at the left. Slide the ship to its
+    // right, and widen the view only when the ship cannot otherwise fit beside it.
+    const fitAboard = cardFor?.vessel && focus?.vessel && !ascent.on && !transit.on && !returning.on && W / H > 1.05 && !cardMobile.matches;
+    aboardFitK += ((fitAboard ? 1 : 0) - aboardFitK) * (reduced ? 1 : 1 - Math.exp(-dt * 4));
+    let aboardShift = 0;
+    if (aboardFitK > 0.001) {
+      camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+      const [left, right] = shipScreenSpan();
+      const from = (parseFloat(cardX) || 16) + cardWidth + 32;
+      const to = W - 32;
+      const scale = Math.min(1, (to - from) / Math.max(1, right - left));
+      const shift = Math.max(0, from - (W / 2 + (left - W / 2) * scale));
+      camera.zoom *= THREE.MathUtils.lerp(1, scale, aboardFitK);
+      aboardShift = shift * aboardFitK;
+    }
+    const lensShift = (viewOffset > 0.001 && W / H > 1.05 ? W * 0.13 * viewOffset : 0) + aboardShift;
+    if (lensShift > 0.01) camera.setViewOffset(W, H, -lensShift, 0, W, H);
     else camera.clearViewOffset();
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
