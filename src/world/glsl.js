@@ -45,6 +45,7 @@ uniform float uCloud;
 uniform float uRain;
 uniform float uSnow;
 uniform float uFog;
+uniform float uFogExtinction;
 uniform float uWind;
 uniform float uThunder;
 uniform float uLightning;
@@ -88,12 +89,9 @@ float directShade(vec3 n) {
   return (smoothstep(0.3, -0.5, dot(n, uSunDir)) * uSunStrength + smoothstep(0.3, -0.5, dot(n, uMoonDir)) * uMoonStrength * 0.38) / max(0.001, uSunStrength + uMoonStrength * 0.38);
 }
 float surfaceLight() { return 0.12 + uDaylight * (1.0 - uCloud * 0.65) + uMoonStrength * 0.15; }
-// A clear foreground preserves facets and painted steel; extinction builds with distance.
-// Heavy falling snow thickens the air on its own, so a blizzard reads apart from sleet.
-float airFog(float dist) {
-  float opticalDepth = max(0.0, dist - 12.0) * (0.0005 + uFog * uFog * 0.012 + uSnow * uSnow * 0.006);
-  return (1.0 - exp(-opticalDepth * opticalDepth)) * max(uFog, uSnow * 0.75);
-}
+// Beer–Lambert extinction from the reported visibility (Koschmieder, per scene unit):
+// an object at the visibility distance keeps 2% of its contrast against the sky.
+float airFog(float dist) { return 1.0 - exp(-max(dist, 0.0) * uFogExtinction); }
 
 vec3 starLight(vec3 d, float clouds) {
   float night = (1.0 - smoothstep(0.0, 0.22, uDaylight)) * (1.0 - uTwilight * 0.92);
@@ -134,6 +132,18 @@ vec3 starLight(vec3 d, float clouds) {
   return stars * visible * (1.0 - uMoonStrength * 0.25);
 }
 
+vec3 horizonSky(float overcast) {
+  return mix(vec3(0.018, 0.031, 0.055), mix(vec3(0.26, 0.50, 0.80), vec3(0.52, 0.57, 0.62), overcast), uDaylight);
+}
+// The hazy air at the horizon in direction d. Fog scatters this toward the viewer from
+// every direction, so fogged ice and water fade to it rather than to the dark sky below the sea line.
+vec3 horizonAir(vec3 d) {
+  float facingSun = pow(max(dot(normalize(d.xz + vec2(0.0001)), normalize(uSunDir.xz + vec2(0.0001))), 0.0), 3.0);
+  vec3 col = horizonSky(smoothstep(0.35, 1.0, uCloud)) * (1.0 - uThunder * 0.48);
+  col += vec3(0.3, 0.12, 0.07) * uTwilight * facingSun * (1.0 - uCloud * 0.8);
+  return mix(col, mix(vec3(0.025, 0.035, 0.05), vec3(0.34, 0.39, 0.43), uDaylight), uFog * 0.7);
+}
+
 vec3 skyColor(vec3 d) {
   float h = d.y;
   float seaH = h - uHorizonDip;
@@ -147,7 +157,7 @@ vec3 skyColor(vec3 d) {
   float overcast = smoothstep(0.35, 1.0, uCloud);
   vec3 zenith = mix(vec3(0.0015, 0.003, 0.012), mix(vec3(0.025, 0.11, 0.30), vec3(0.18, 0.23, 0.30), overcast), uDaylight);
   vec3 mid = mix(vec3(0.006, 0.013, 0.032), mix(vec3(0.065, 0.24, 0.56), vec3(0.30, 0.35, 0.42), overcast), uDaylight);
-  vec3 horizon = mix(vec3(0.018, 0.031, 0.055), mix(vec3(0.26, 0.50, 0.80), vec3(0.52, 0.57, 0.62), overcast), uDaylight);
+  vec3 horizon = horizonSky(overcast);
   vec3 col = mix(horizon, mid, smoothstep(0.0, 0.16, h));
   col = mix(col, zenith, smoothstep(0.18, 0.75, h));
   float blueHour = smoothstep(-0.22, -0.06, uSunElevation) * (1.0 - smoothstep(-0.04, 0.06, uSunElevation));
@@ -202,11 +212,7 @@ vec3 skyColor(vec3 d) {
   // Wetter conditions widen it; clear skies retain more definition and the celestial glow.
   float width = 0.012 + uCloud * 0.038 + uFog * 0.065 + uRain * 0.025;
   float mist = exp(-pow(abs(seaH) / width, 1.6)) * (0.12 + uCloud * 0.35 + uFog * 0.45);
-  float facingSun = pow(max(dot(normalize(d.xz + vec2(0.0001)), normalize(uSunDir.xz + vec2(0.0001))), 0.0), 3.0);
-  vec3 mistColor = horizon * (1.0 - uThunder * 0.48);
-  mistColor += vec3(0.3, 0.12, 0.07) * uTwilight * facingSun * (1.0 - uCloud * 0.8);
-  mistColor = mix(mistColor, mix(vec3(0.025, 0.035, 0.05), vec3(0.34, 0.39, 0.43), uDaylight), uFog * 0.7);
-  col = mix(col, mistColor, mist);
+  col = mix(col, horizonAir(d), mist);
   // Light scatters through a broad cloud bank around the strike and into reflections.
   float stormFacing = max(dot(normalize(d.xz + vec2(0.0001)), uStormDir.xz), 0.0);
   float cloudFlash = pow(stormFacing, 70.0) * exp(-pow((h - 0.08) / 0.13, 2.0));

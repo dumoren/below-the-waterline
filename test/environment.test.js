@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { sceneConditions, decodeWeather, fetchStJohnsWeather, ST_JOHNS, stJohnsTime, WEATHER_PRESETS, previewConditions, stormGlow, weatherRetryDelay } from '../src/environment.js';
-import { WEATHER_PARAMETERS, normalizeWeatherParameters, weatherParameters, composeWeatherConditions } from '../src/weather-parameters.js';
+import { WEATHER_PARAMETERS, normalizeWeatherParameters, weatherParameters, composeWeatherConditions, fogExtinction } from '../src/weather-parameters.js';
 
 const clear = decodeWeather({ cloud_cover: 0, precipitation: 0, weather_code: 0, wind_speed_10m: 5 });
 
@@ -155,6 +155,28 @@ test('weather studio composes independent light, visibility and simultaneous pre
     const preset = previewConditions(id);
     assert.deepEqual(composeWeatherConditions(preset, weatherParameters(preset)), preset);
   }
+});
+
+test('air fog follows Koschmieder extinction from the measured visibility distance', () => {
+  const noon = new Date('2026-10-15T12:00:00-02:30');
+  const at = (conditions, metres) => Math.exp(-conditions.fogExtinction * metres / 3.1);
+  // An object at the visibility distance keeps 2% contrast, whatever that distance is.
+  for (const metres of [120, 6000, 74_640]) {
+    const decoded = decodeWeather({ cloud_cover: 20, precipitation: 0, weather_code: 1, wind_speed_10m: 10, visibility: metres });
+    const scene = sceneConditions(noon, decoded);
+    assert.equal(scene.visibilityMetres, metres);
+    assert.ok(Math.abs(at(scene, metres) - 0.02) < 1e-3);
+  }
+  // Beyond 20 km stays clearer than 20 km, though both read as full visibility.
+  const far = sceneConditions(noon, decodeWeather({ cloud_cover: 0, precipitation: 0, weather_code: 0, wind_speed_10m: 5, visibility: 60_000 }));
+  assert.equal(far.fog, 0); assert.ok(far.fogExtinction < fogExtinction(20_000));
+  // Editing visibility replaces the measured distance; other edits keep it.
+  assert.equal(composeWeatherConditions(far, { cloud: 0.5 }).visibilityMetres, 60_000);
+  assert.equal(composeWeatherConditions(far, { visibility: 0.3 }).visibilityMetres, 6000);
+  // Without a measurement the 0–20 km scale applies, floored so dense fog stays finite.
+  assert.equal(sceneConditions(noon, { fog: 1 }).visibilityMetres, 50);
+  assert.equal(previewConditions('fog').visibilityMetres, 700);
+  assert.ok(previewConditions('fog').fogExtinction > previewConditions('mist').fogExtinction);
 });
 
 test('all weather controls clamp invalid input and preserve zero', () => {

@@ -100,7 +100,7 @@ function start() {
     uBoatSize: { value: new THREE.Vector2(SHIP.L / 2 + 0.3, SHIP.B / 2 + 0.25) },
   };
 
-  const environmentKeys = ['daylight', 'sunStrength', 'moonStrength', 'moonDiskStrength', 'moonFraction', 'moonAngle', 'moonWaxing', 'sunElevation', 'sunAngularRadius', 'moonAngularRadius', 'twilight', 'ambient', 'cloud', 'rain', 'snow', 'fog', 'wind', 'ice', 'drizzle', 'thunder', ...UNDERWATER_SCALARS, 'seaEnergy'];
+  const environmentKeys = ['daylight', 'sunStrength', 'moonStrength', 'moonDiskStrength', 'moonFraction', 'moonAngle', 'moonWaxing', 'sunElevation', 'sunAngularRadius', 'moonAngularRadius', 'twilight', 'ambient', 'cloud', 'rain', 'snow', 'fog', 'fogExtinction', 'wind', 'ice', 'drizzle', 'thunder', ...UNDERWATER_SCALARS, 'seaEnergy'];
   U.uHorizonDip = { value: 0 };
   U.uWaterTint = { value: new THREE.Vector3(1, 1, 1) };
   U.uWaves = { value: DEFAULT_WAVES.map((wave) => new THREE.Vector4(...wave)) };

@@ -66,6 +66,8 @@ export function astronomicalConditions(date = new Date(), weather = null) {
     moonWaxing: illumination.waxing ? 1 : -1,
     period: sun.altitude > 0 ? 'Day' : sun.altitude > -12 ? 'Twilight' : 'Night',
     solarPhase: solarPhase(solarAltitude, rising),
+    // A measured distance survives composition while the visibility value matches it.
+    fog: 1 - p.visibility, visibilityMetres: weather?.visibilityMetres,
   }, { ...p, daylight, sun: sunlight, moon: moonlight, twilight });
 }
 

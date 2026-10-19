@@ -220,10 +220,15 @@ function shipMaterial(uniforms, color, { emissive = 0, hull = false, windows = f
 
         if (depth > 0.0) {
           if (uUnder > 0.5) col = mix(col, uwWater(-V, cameraPosition.y), uwFog(dist));
-          else col = mix(col * vec3(0.3, 0.6, 0.6), vec3(0.005, 0.03, 0.045), 1.0 - exp(-depth * 0.35));
+          else {
+            col = mix(col * vec3(0.3, 0.6, 0.6), vec3(0.005, 0.03, 0.045), 1.0 - exp(-depth * 0.35));
+            // As on the berg: hide the sliver where the coarser water mesh sits below the exact waterline.
+            col = mix(col, vec3(0.8, 0.86, 0.9) * (0.12 + uAmbient * 0.43), (1.0 - smoothstep(0.0, 0.5, depth)) * 0.6);
+            col = mix(col, horizonAir(-V), airFog(dist) * (1.0 - smoothstep(0.0, 0.5, depth)));
+          }
         } else if (uUnder < 0.5) {
           col = mix(col, skyColor(normalize(vec3(-V.x, 0.03, -V.z))), smoothstep(80.0, 360.0, dist) * 0.5);
-          col = mix(col, skyColor(-V), airFog(dist));
+          col = mix(col, horizonAir(-V), airFog(dist));
         } else {
           col *= 0.25;
         }

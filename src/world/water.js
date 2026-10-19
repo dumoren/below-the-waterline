@@ -151,12 +151,17 @@ export function buildWater(uniforms, { mobile }) {
           float grazing = abs(dot(normalize(vN), V));
           float horizonHaze = (1.0 - smoothstep(0.002, 0.018, grazing)) * smoothstep(460.0, 1600.0, dist);
           haze = max(haze, horizonHaze);
-          float atmosphere = 1.0 - (1.0 - haze) * (1.0 - airFog(dist));
+          col = mix(col, horizonAir(-V), airFog(dist));
           // Match the actual background ray, rather than sampling a fixed sky elevation.
           // At the outer grid edge this becomes exactly the sky behind it, hiding the seam.
-          if (atmosphere > 0.0) col = mix(col, skyColor(-V), atmosphere);
+          if (haze > 0.0) col = mix(col, skyColor(-V), haze);
           float alpha = max(mix(0.52, 0.97, fres), foam);
           alpha = mix(alpha, 1.0, smoothstep(60.0, 180.0, dist));
+          // Fog in front of the surface also hides what lies beneath it.
+          alpha = mix(alpha, 1.0, airFog(dist));
+          // Daylight reaching the sea has crossed the fog bank (~400 m, 130 units), so it arrives
+          // weak and diffuse. Glare off the bright surface then hides the ice below it.
+          alpha = mix(alpha, 1.0, 1.0 - exp(-uFogExtinction * 130.0));
           gl_FragColor = vec4(col, alpha);
         } else {
           // From below: Snell's window. Outside ~48.6° from vertical the surface is a mirror of the deep.

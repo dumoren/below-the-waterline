@@ -48,7 +48,11 @@ export function ironMaterial(uniforms, highlight = false) {
         // Breathing warm rim at the bottom of the dive: the way up, in the boat's colour.
         col += vec3(0.55, 0.16, 0.1) * rimA * uAnchorIdle * 0.9;
         col = mix(col, uwWater(-V, cameraPosition.y), uwFog(length(cameraPosition - vWorld)) * uUnder);
-        if (uUnder < 0.5) col *= 0.2;
+        if (uUnder < 0.5) {
+          col *= 0.2;
+          // Only the links above the surface stand in the fog; the water covers the rest.
+          if (vWorld.y > 0.0) col = mix(col, horizonAir(-V), airFog(length(cameraPosition - vWorld)));
+        }
         gl_FragColor = vec4(col, 1.0);
       }
     `,

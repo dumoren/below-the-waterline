@@ -240,8 +240,8 @@ export function bergMaterial(uniforms) {
           // Retain low-contrast facets in clear air, then lose them naturally in fog.
           // Use the background ray so distant ice cannot inherit a bright, unrelated sky strip.
           float distanceHaze = smoothstep(80.0, 500.0, dist) * (0.35 + 0.4 * uDistant);
-          float atmosphere = 1.0 - (1.0 - distanceHaze) * (1.0 - airFog(dist));
-          col = mix(col, skyColor(-V), atmosphere);
+          col = mix(col, horizonAir(-V), airFog(dist));
+          col = mix(col, skyColor(-V), distanceHaze);
         } else {
           // Below: sunlight filtered by depth, caustics, contacts glowing from inside.
           vec3 at = absorb(depth);
@@ -278,6 +278,11 @@ export function bergMaterial(uniforms) {
             // Seen from above through the surface: turquoise near the top, lost to the dark below.
             col = col * vec3(0.22, 0.62, 0.66) + vec3(0.012, 0.085, 0.095) * waterTintAt(wp.y) * uWaterLight * exp(-depth * 0.3);
             col = mix(col, uwFogColor(wp.y) * 0.7, 1.0 - exp(-depth * 0.2));
+            // The water mesh drops waves its grid can't carry, so its surface can sit a little
+            // below this exact waterline. Blend that exposed sliver into the foam drawn there.
+            col = mix(col, vec3(0.8, 0.86, 0.9) * (0.12 + uAmbient * 0.43), (1.0 - smoothstep(0.0, 0.7, depth)) * 0.85);
+            // Only that exposed sliver stands in open air; deeper ice is veiled by the water surface.
+            col = mix(col, horizonAir(-V), airFog(dist) * (1.0 - smoothstep(0.0, 0.7, depth)));
           }
         }
         gl_FragColor = vec4(col, 1.0);

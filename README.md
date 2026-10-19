@@ -25,7 +25,8 @@ the ice as glowing crystals, and a sonar ping finds it.
 - **St. John’s sky:** weather loads automatically for the fixed scene coordinates, 47.56° N,
   52.71° W. [Open-Meteo](https://open-meteo.com/en/docs) supplies cloud cover, separate rain/showers/snowfall,
   visibility, direct solar radiation, weather codes and wind. Current precipitation totals are converted to hourly rates
-  using the API interval, and rain and snow can appear together. Missing optional measurements fall back to weather codes.
+  using the API interval, and rain and snow can appear together. Reported visibility in metres sets the air's
+  extinction directly (Koschmieder: 3.912 ÷ visibility), so the berg and ship fade at the real distance. Missing optional measurements fall back to weather codes.
   [SunCalc](https://github.com/mourner/suncalc) supplies sun/moon positions and lunar illumination for
   the same city. The displayed clock always uses `America/St_Johns`, including daylight saving time.
   Visitor location, browser geolocation permissions and location preferences are not used.

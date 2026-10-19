@@ -1,8 +1,16 @@
 import { underwaterConditions } from './underwater-environment.js';
+import { M_PER_UNIT } from './scene-scale.js';
 
 // One normalized vocabulary for live observations and presets.
 // These are visual strengths, not probabilities. Visibility spans 0–20 km.
 export const CLEAR_VISIBILITY_METRES = 20_000;
+const MIN_VISIBILITY_METRES = 50;
+
+// Koschmieder: an object fades to the 2% contrast threshold at the visibility
+// distance, so extinction is 3.912 / visibility. Returned per scene unit.
+export function fogExtinction(visibilityMetres) {
+  return 3.912 / Math.max(MIN_VISIBILITY_METRES, visibilityMetres) * M_PER_UNIT;
+}
 export const WEATHER_PARAMETERS = Object.freeze([
   { key: 'daylight', label: 'Daylight', group: 'Light & atmosphere', default: 1, hint: 'Brightness of the sky and ambient light' },
   { key: 'sun', label: 'Sunlight', group: 'Light & atmosphere', default: 1, hint: 'Direct sunlight and reflections' },
@@ -38,14 +46,18 @@ export function weatherParameters(conditions) {
 // Keep the starting sun/moon positions and lunar phase. Every parameter is independent:
 // changing cloud cover does not silently overwrite a manually chosen sun value.
 export function composeWeatherConditions(base, values) {
-  const p = normalizeWeatherParameters(values, weatherParameters(base));
+  const prior = weatherParameters(base);
+  const p = normalizeWeatherParameters(values, prior);
+  // Keep a measured distance (it can exceed 20 km) until visibility itself is edited.
+  const visibilityMetres = Number.isFinite(base.visibilityMetres) && Math.abs(p.visibility - prior.visibility) < 1e-9
+    ? base.visibilityMetres : Math.max(MIN_VISIBILITY_METRES, p.visibility * CLEAR_VISIBILITY_METRES);
   const moonAltitude = base.moonAltitude ?? Math.asin(base.moonDirection?.[1] || 0) * 180 / Math.PI;
   const moonHorizon = Math.min(1, Math.max(0, (moonAltitude + 0.6) / 0.8));
   const conditions = {
     ...base,
     daylight: p.daylight, sunStrength: p.sun, moonStrength: p.moon, twilight: p.twilight,
     moonDiskStrength: moonHorizon * moonHorizon * (3 - 2 * moonHorizon) * (1 - p.cloud * 0.95) * (0.1 + p.visibility * 0.9) * (1 - p.thunder * 0.8) * (0.2 + (1 - p.daylight) * 0.8),
-    cloud: p.cloud, fog: 1 - p.visibility,
+    cloud: p.cloud, fog: 1 - p.visibility, visibilityMetres, fogExtinction: fogExtinction(visibilityMetres),
     rain: p.rain, snow: p.snow, ice: p.ice, drizzle: p.drizzle, wind: p.wind, thunder: p.thunder,
     ambient: (0.16 + p.daylight * 0.84) * (1 - p.cloud * 0.3),
   };
